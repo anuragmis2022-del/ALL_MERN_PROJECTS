@@ -1,247 +1,115 @@
 const express = require("express");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const validator = require("validator");
 const { isLoggedIn } = require("../Middleware/isLoggedIn");
 const { authorize } = require("../Middleware/authorize");
 const { AppError } = require("../Utils/AppError");
 const { Organization } = require("../Model/Organization.schema");
-const { default: mongoose } = require("mongoose");
-const router = express.Router();
-const bcrypt = require("bcrypt");
 const { User } = require("../Model/User.Schema");
-const validator=require("validator")
-  router.post("/", isLoggedIn, authorize("owner"), async (req, res) => {
-  const { name, isActive } = req.body;
 
-  console.log("BODY:", req.body);
-  console.log("NAME:", name);
-  console.log("ISACTIVE:", isActive);
+const router = express.Router();
+router.use(isLoggedIn, authorize("owner"));
 
-  if (!name.trim() || name.trim().length > 100) {
-    throw new AppError(401, "Invalid name");
-  }
-
-  const createdOrg = await Organization.create({
-    name,
-    isActive,
-    createdBy: req.user._id,
-  });
-
-  res.status(201).json({
-    message: "Organization Created",
-    data: createdOrg,
-  });
+// List organizations
+router.get("/", async (req, res) => {
+  const data = await Organization.find().sort({ createdAt: -1 });
+  res.status(200).json({ data });
 });
 
-router.get("/", isLoggedIn, authorize("owner"), async (req, res) => {
-  const { skip, limit } = req.query;
-  const data = await Organization.find()
-    .limit(limit)
-    .skip(limit * skip);
-
-  res.status(201).json({
-    data,
-  });
+// Create organization
+router.post("/", async (req, res) => {
+  const name = req.body.name?.trim();
+  if (!name || name.length > 100) throw new AppError(400, "Enter an organization name (maximum 100 characters)");
+  const data = await Organization.create({ name, createdBy: req.user._id });
+  res.status(201).json({ message: "Organization created", data });
 });
 
-router.get("/:id", isLoggedIn, authorize("owner"), async (req, res) => {
+// Get one organization
+router.get("/organization/:id", async (req, res) => {
   const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError("Invalid Id ");
-  }
-
-  const getUser = await Organization.findOne(id);
-
-  if (!getUser) {
-    throw new AppError("Id does not found ");
-  }
-
-  res.status(201).json({
-    data: getUser,
-  });
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid organization ID");
+  const data = await Organization.findById(id);
+  if (!data) throw new AppError(404, "Organization not found");
+  res.status(200).json({ data });
 });
 
-router.delete("/:id", isLoggedIn,authorize("owner"), async (req, res) => {
+// Activate/deactivate organization
+router.patch("/organization/:id", async (req, res) => {
   const { id } = req.params;
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError("Invalid Id");
+  const update = {};
+  if (typeof req.body.isActive === "boolean") update.isActive = req.body.isActive;
+  if (req.body.name !== undefined) {
+    const name = req.body.name.trim();
+    if (!name || name.length > 100) throw new AppError(400, "Invalid organization name");
+    update.name = name;
   }
-  const deletedUser = await Organization.findByIdAndUpdate(
-    id,
-    { isActive: false },
-    { returnDocument: "after" },
-  );
-
-  if (!deletedUser) {
-    throw new AppError("Organization does not exist");
+  if (!Object.keys(update).length) throw new AppError(400, "Provide name or isActive to update");
+  const data = await Organization.findByIdAndUpdate(id, update, { new: true, runValidators: true });
+  if (!data) throw new AppError(404, "Organization not found");
+  // Keep its admins aligned with organization status.
+  if (typeof update.isActive === "boolean") {
+    await User.updateMany({ organizationId: id, role: "admin" }, { isActive: update.isActive });
   }
-  res.status(201).json({
-    msg: "Deleted Organization",
-    data: deletedUser,
-  });
+  res.status(200).json({ message: "Organization updated", data });
 });
 
-router.patch("/:id", isLoggedIn, authorize("owner"), async (req, res) => {
-  const { name, isActive } = req.body;
-
-  if (!name.trim() || !name.trim().length > 100) {
-    throw new AppError(401, "Invalid Name");
-  }
-
-  const updatedOrg = await Organization.findByIdAndUpdate(
-    id,
-    { name, isActive },
-    { runValidation: true, returnValidation: "after" },
-  );
-
-  if (!updatedOrg) {
-    throw new AppError(401, "Organization does not exist ");
-  }
-
-  res.status().json({
-    message: "done",
-    data: updatedOrg,
-  });
-});
-
-/*
-   Owner APi to make Admin
-*/
-
-
-
-
-router.post("/organization/:id/admin", isLoggedIn, authorize("owner"), async (req, res) => {
+// Backwards-compatible deactivate route
+router.delete("/:id", async (req, res) => {
   const { id } = req.params;
-
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError(400, "Invalid Id");
-  }
-
-  const foundOrg = await Organization.findById(id);
-
-  if (!foundOrg) {
-    throw new AppError(400, "Organization does not exist");
-  }
-
-  const { name, password, email } = req.body;
-
-  if (!name || name.trim().length > 20) {
-    throw new AppError(401, "invalid Name");
-  }
-  if (!email || !validator.isEmail(email)) {
-    throw new AppError("Invalid Email id ");
-  }
-  if (!password || !validator.isStrongPassword(password)) {
-    throw new AppError("Invalid password");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 12);
-
-  const createdAdmin = await User.create({
-    name,
-    password: hashedPassword,
-    email,
-    organizationId: id,
-    role: "admin",
-    isActive: foundOrg.isActive,
-  });
-  res.status(201).json({
-    data: createdAdmin,
-    message: foundOrg.isActive
-      ? `Admin created Under ${foundOrg.name}`
-      : `
-  Admin created Under ${foundOrg.name} which is INACTIVE`,
-  });
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid organization ID");
+  const data = await Organization.findByIdAndUpdate(id, { isActive: false }, { new: true });
+  if (!data) throw new AppError(404, "Organization not found");
+  await User.updateMany({ organizationId: id, role: "admin" }, { isActive: false });
+  res.status(200).json({ message: "Organization deactivated", data });
 });
 
-router.get("/organization/:id/admin", isLoggedIn, authorize("owner"), async (req, res) => {
+// Create an admin inside an organization
+router.post("/organization/:id/admin", async (req, res) => {
   const { id } = req.params;
-
-  if (!id && !mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError(400, "Invalid Id ");
-  }
-
-  const foundorg = await organization.findById(id);
-
-  if (!foundorg) {
-    throw new AppError(400, "Organization Not Exist");
-  }
-
-  const foundAdmin = await User.find({
-    organizationId: foundOrg._id,
-    role: "admin",
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid organization ID");
+  const organization = await Organization.findById(id);
+  if (!organization) throw new AppError(404, "Organization not found");
+  const name = req.body.name?.trim();
+  const email = req.body.email?.trim().toLowerCase();
+  const { password } = req.body;
+  if (!name || name.length < 2 || name.length > 20) throw new AppError(400, "Name must be 2-20 characters");
+  if (!email || !validator.isEmail(email)) throw new AppError(400, "Enter a valid email");
+  if (!password || !validator.isStrongPassword(password)) throw new AppError(400, "Use a strong password (upper/lowercase, number and symbol)");
+  if (await User.findOne({ email })) throw new AppError(409, "Email is already registered");
+  const data = await User.create({
+    name, email, password: await bcrypt.hash(password, 10),
+    organizationId: organization._id, role: "admin", isActive: organization.isActive,
   });
-
-  res.status(201).json({
-    data: foundAdmin,
-    message: foundorg.isActive
-      ? `Organization Active`
-      : `Organization Inactive`,
-  });
+  res.status(201).json({ message: "Admin created", data: { _id: data._id, name: data.name, email: data.email, role: data.role, isActive: data.isActive } });
 });
 
-router.get("/admin/:id", isLoggedIn, authorize("owner"), async (req, res) => {
+// List admins for one organization
+router.get("/organization/:id/admin", async (req, res) => {
   const { id } = req.params;
-
-  if (!id || !mongoose.Types.ObjectId.isValid(id));
-  {
-    throw new AppError(400, "Invalid ID");
-  }
-
-  const foundUser = await User.find({ _id: id, role: "admin" });
-  if (!foundUser) {
-    throw new AppError(400, "Admin does not exist");
-  }
-
-  const foundOrg = await organization.find(foundUser.organizationId);
-
-  res.status(201).json({
-    data: foundUser,
-    message: foundOrg.isActive
-      ? `Orgnaization ~${foundOrg.name} is ACTIVE`
-      : `Orgnaization ~${foundOrg.name} is INACTIVE`,
-  });
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid organization ID");
+  const organization = await Organization.findById(id);
+  if (!organization) throw new AppError(404, "Organization not found");
+  const data = await User.find({ organizationId: id, role: "admin" }).select("name email isActive createdAt");
+  res.status(200).json({ data });
 });
 
-router.delete("/admin/:id", isLoggedIn, authorize("owner"), async (req, res) => {
+// Activate/deactivate an admin
+router.patch("/admin/:id", async (req, res) => {
   const { id } = req.params;
-
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError(400, "Invalid ID");
-  }
-
-  const foundUser = await User.findById({ id: _id, role: "admin" });
-
-  if (!foundUser) {
-    throw new AppError("Admin does not exist ");
-  }
-  foundUser.isActive = false;
-
-  res.status(201).json({
-    msg: "Admin id dleted successfully",
-    data: foundUser,
-  });
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid admin ID");
+  if (typeof req.body.isActive !== "boolean") throw new AppError(400, "isActive must be true or false");
+  const data = await User.findOneAndUpdate({ _id: id, role: "admin" }, { isActive: req.body.isActive }, { new: true }).select("name email role isActive organizationId");
+  if (!data) throw new AppError(404, "Admin not found");
+  res.status(200).json({ message: "Admin updated", data });
 });
 
-router.patch("/admin/:id", isLoggedIn, authorize("owner"), async (req, res) => {
+router.delete("/admin/:id", async (req, res) => {
   const { id } = req.params;
-
-  if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-    throw new AppError(400, "Invalid ID");
-  }
-
-  const foundUser = await User.findOne({ id: _id, role: "admin" });
-  if (!foundUser) {
-    throw new AppError(401, "User Invalid");
-  }
-
-  foundUser.isActive = true;
-
-  res.status(200).json({
-    msg: "Admin succesfully updated",
-    data: foundUser,
-  });
+  if (!mongoose.Types.ObjectId.isValid(id)) throw new AppError(400, "Invalid admin ID");
+  const data = await User.findOneAndUpdate({ _id: id, role: "admin" }, { isActive: false }, { new: true }).select("name email role isActive organizationId");
+  if (!data) throw new AppError(404, "Admin not found");
+  res.status(200).json({ message: "Admin deactivated", data });
 });
-module.exports = {
-  OwnerRouter: router,
-};
+
+module.exports = { OwnerRouter: router };

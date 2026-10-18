@@ -1,36 +1,22 @@
 const { AppError } = require("../Utils/AppError");
-const validator = require("validator");
 const jwt = require("jsonwebtoken");
 const { User } = require("../Model/User.Schema");
 
 const isLoggedIn = async (req, res, next) => {
-  const { token } = req.cookies;
-
-  if (!token) {
-    throw new AppError(400, "Not having token");
+  const token = req.cookies?.token;
+  if (!token) throw new AppError(401, "Please log in first");
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    throw new AppError(401, "Session expired. Please log in again");
   }
-
-  if (!validator.isJWT(token)) {
-    throw new AppError(400, "Not having valid token");
+  const user = await User.findById(payload.id).populate("organizationId");
+  if (!user || !user.isActive) throw new AppError(401, "Account is inactive or not found");
+  if (user.role !== "owner" && (!user.organizationId || !user.organizationId.isActive)) {
+    throw new AppError(403, "Your organization is inactive");
   }
-
-  const originalObject = jwt.verify(
-    token,
-    process.env.JWT_SECRET
-  );
-
-  const foundUser = await User.findById(originalObject.id)
-    .populate("organizationId");
-
-  if (!foundUser) {
-    throw new AppError(400, "Token not found in the DB");
-  }
-
-  req.user = foundUser;
-
+  req.user = user;
   next();
 };
-
-module.exports = {
-  isLoggedIn,
-};
+module.exports = { isLoggedIn };

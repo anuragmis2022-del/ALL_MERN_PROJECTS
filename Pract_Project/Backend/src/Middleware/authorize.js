@@ -1,19 +1,8 @@
 const { AppError } = require("../Utils/AppError");
-
-const authorize = (...roles) => {
-  return (req, res, next) => {
-
-    console.log("ROLE FROM DATABASE:", req.user.role);
-    console.log("ALLOWED ROLES:", roles);
-
-
-    if (!roles.includes(req.user.role)) {
-      throw new AppError(403, "Unauthorized Operation");
-    }
-
-    next();
-  };
+const authorize = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.role)) {
+    throw new AppError(403, "You do not have permission to perform this action");
+  }
+  next();
 };
-module.exports={
-    authorize
-}
+module.exports = { authorize };

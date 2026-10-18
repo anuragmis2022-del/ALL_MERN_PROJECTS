@@ -24,12 +24,12 @@ const TaskSchema = new mongoose.Schema(
       type: String,
 
       enum: ["low", "medium", "high"],
-      default: "mediam",
+      default: "medium",
     },
 
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "organization",
+      ref: "Organization",
       required: true,
       immutable:true 
     },

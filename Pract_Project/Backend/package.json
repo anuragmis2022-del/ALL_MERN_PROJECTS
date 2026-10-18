@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/app.js",
-    "prod": "nodemon src/app.js"
+    "prod": "nodemon src/app.js",
+    "seed:owner": "node src/Utils/createOwner.js",
+    "start": "node src/app.js"
   },
   "keywords": [],
   "author": "",
@@ -16,11 +18,12 @@
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
-    "dotenv": "^18.0.4",
+    "dotenv": "^18.0.8",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.2",
     "nodemon": "^3.1.14",
+    "socket.io": "^4.8.4",
     "validate": "^5.2.0",
     "validator": "^13.15.35"
   }

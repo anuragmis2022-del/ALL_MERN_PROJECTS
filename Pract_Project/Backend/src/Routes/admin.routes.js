@@ -110,18 +110,13 @@ router.patch("/teams/:id", isLoggedIn, authorize("admin"), async (req, res) => {
   if (!name || name.trim().length > 50) {
     throw new AppError(400, "Invalid name");
   }
-  const updatedUser = await Team.findByIdAndUpdate({
-    _id: id,
-    organizationId: req.user.organizationId._id,
-  });
+  const updatedUser = await Team.findOneAndUpdate(
+    { _id: id, organizationId: req.user.organizationId._id },
+    { name: name.trim(), isActive: isActive ?? true },
+    { new: true, runValidators: true }
+  );
 
-  if (!updatedUser) {
-    throw new AppError(400, "Team is not present");
-  }
-  
-updatedUser.name=name
-  updatedUser.isActive = true;
-  await updatedUser.save()
+  if (!updatedUser) throw new AppError(404, "Team not found");
 
   res.status(201).json({
     msg: "updated Successfully ",
@@ -167,7 +162,7 @@ router.post(
     if (!name || name.trim().length > 50) {
       throw new AppError(401, "Invalid name");
     }
-    if (!validator.isEmail(email)) {
+    if (!email || !validator.isEmail(email)) {
       throw new AppError(401, "Invalid Email");
     }
     if (!validator.isStrongPassword(password)) {
@@ -176,9 +171,11 @@ router.post(
 
     const hashPassword = await bcrypt.hash(password, 10);
 
+    if (await User.findOne({ email: email.toLowerCase() })) throw new AppError(409, "Email is already registered");
+
     const createdEmployee = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase(),
       password: hashPassword,
       role: "employee",
       organizationId: req.user.organizationId._id,
@@ -192,38 +189,50 @@ router.post(
   },
 );
 
+
 router.get(
   "/teams/:teamId/employees",
   isLoggedIn,
-  authorize,
+  authorize("admin"),
   async (req, res) => {
-    const { id } = req.params;
+    const { teamId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new AppError(401, "team Id is invalid");
+    if (!mongoose.Types.ObjectId.isValid(teamId)) {
+      throw new AppError(400, "Team Id is invalid");
     }
 
-    const foundTeam = await Team.find({
+    const foundTeam = await Team.findOne({
+      _id: teamId,
+      organizationId: req.user.organizationId._id,
+    });
+
+    if (!foundTeam) {
+      throw new AppError(400, "Team not found");
+    }
+
+    const employees = await User.find({
       teamId: teamId,
-      organizationId: req.user.organizationId.id,
+      organizationId: req.user.organizationId._id,
       role: "employee",
     });
 
-    res.status(201).json({
-      message: "All employee of the team are",
-      data: foundTeam,
+    res.status(200).json({
+      message: "All employees of the team",
+      data: employees,
     });
   },
 );
 
-router.delete(
-  "/employees/employeesId",
-  isLoggedIn,
-  authorize,
-  async (req, res) => {
-    const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+
+router.delete(
+  "/employees/:employeeId",
+  isLoggedIn,
+  authorize("admin"),
+  async (req, res) => {
+    const { employeeId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
       throw new AppError(400, "Invalid ID");
     }
 
@@ -238,7 +247,7 @@ router.delete(
     }
 
     foundEmployee.isActive = false;
-    foundEmployee.save();
+    await foundEmployee.save();
     res.status(201).json({
       message: "User deleted",
       data: foundEmployee,
@@ -247,15 +256,13 @@ router.delete(
 );
 
 router.patch(
-  "/employees/:employeeId",
+  "/employees/:employeeId/activate",
   isLoggedIn,
-  authorize,
+  authorize("admin"),
   async (req, res) => {
     const { employeeId } = req.params;
 
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
       throw new AppError(400, "Invalid ID");
     }
 
@@ -270,7 +277,7 @@ router.patch(
     }
 
     UpdateEmployee.isActive = true;
-    UpdateEmployee.save();
+    await UpdateEmployee.save();
     res.status(201).json({
       message: "User deleted",
       data: UpdateEmployee,
@@ -294,7 +301,7 @@ router.post(
 
     const foundEmployee = await User.findOne({
       _id: employeeId,
-      role: "employee",
+      role: "employee", isActive: true, teamId: { $ne: null },
       organizationId: req.user.organizationId._id,
     });
 
@@ -352,7 +359,7 @@ router.get("/alltask",isLoggedIn, authorize("employee"), async(req, res)=>{
 
 
 const foundAllTask=await Task.find({
-organizationId:req.user.organizationId._id
+assignedTo: req.user._id, organizationId:req.user.organizationId._id
 })
 
 res.status(201).json({
@@ -399,14 +406,9 @@ if(!taskChecking)
   throw new AppError(401, "Invalid Task Id ")
 }
 
-const updatedTask=await Task.findByIdAndUpdate(taskId,
-  {
-  title, 
-  description, 
-  status, 
-  priority
-
-})
+if (status && !["todo", "in-progress", "completed"].includes(status)) throw new AppError(400, "Invalid status");
+const updatedTask=await Task.findOneAndUpdate({ _id: taskId, assignedTo: req.user._id },
+  { status }, { new: true, runValidators: true })
 
 res.status(200).json({
   msg:"Task updated", 
@@ -434,6 +436,137 @@ res.status(200).json({
 // router.delete("/task/:taskId", isLoggedIn, authorize, async(req, res)=>{
 
 // })
+
+router.post(
+  "/employees",
+  isLoggedIn,
+  authorize("admin"),
+  async (req, res) => {
+    const { name, email, password } = req.body;
+
+    if (!name || name.trim().length < 2 || name.trim().length > 20) {
+      throw new AppError(400, "Invalid employee name");
+    }
+
+    if (!email || !validator.isEmail(email)) {
+      throw new AppError(400, "Invalid email");
+    }
+
+    if (!password || !validator.isStrongPassword(password)) {
+      throw new AppError(400, "Password is not strong enough");
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingEmployee = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingEmployee) {
+      throw new AppError(409, "Email is already registered");
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const employee = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "employee",
+      organizationId: req.user.organizationId._id,
+      // No teamId: employee is initially unassigned.
+    });
+
+    res.status(201).json({
+      message: "Employee created successfully",
+      data: employee,
+    });
+  }
+);
+
+
+
+
+router.get(
+  "/employees",
+  isLoggedIn,
+  authorize("admin"),
+  async (req, res) => {
+    const employees = await User.find({
+      organizationId: req.user.organizationId._id,
+      role: "employee",
+      isActive: true,
+    })
+      .select("-password")
+      .populate("teamId", "name");
+
+    res.status(200).json({
+      message: "Organization employees",
+      data: employees,
+    });
+  }
+);
+
+
+
+
+router.patch(
+  "/teams/:teamId/employees/:employeeId",
+  isLoggedIn,
+  authorize("admin"),
+  async (req, res) => {
+    const { teamId, employeeId } = req.params;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(teamId) ||
+      !mongoose.Types.ObjectId.isValid(employeeId)
+    ) {
+      throw new AppError(400, "Invalid team or employee ID");
+    }
+
+    const organizationId = req.user.organizationId._id;
+
+    const team = await Team.findOne({
+      _id: teamId,
+      organizationId,
+      isActive: true,
+    });
+
+    if (!team) {
+      throw new AppError(404, "Active team not found");
+    }
+
+    const employee = await User.findOne({
+      _id: employeeId,
+      organizationId,
+      role: "employee",
+      isActive: true,
+    });
+
+    if (!employee) {
+      throw new AppError(404, "Active employee not found");
+    }
+
+    // Assign or move the employee to the selected team.
+    employee.teamId = team._id;
+    await employee.save();
+
+    res.status(200).json({
+      message: "Employee assigned to team successfully",
+      data: {
+        _id: employee._id,
+        name: employee.name,
+        email: employee.email,
+        teamId: employee.teamId,
+      },
+    });
+  }
+);
+
+
+
+
+
 
 
 module.exports = {

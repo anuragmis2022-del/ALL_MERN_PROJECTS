@@ -30,7 +30,8 @@ router.post("/login", async (req, res) => {
     .cookie("token", token, {
       maxAge: 24 * 60 * 60 * 1000,
       httpOnly: true,
-      sameSite: "strict",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
     })
 
     .status(200)
@@ -41,17 +42,17 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/logout",  (req, res) => {
-  res.clearCookie("token").status(201).json({
+  res.clearCookie("token", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" }).status(200).json({
     msg: "Logged out Succesfully",
   });
 });
 
 router.get("/me", isLoggedIn,async(req, res)=>{
 
-    const {name, email, isActive, role}=req.user
+    const {_id,name, email, isActive, role}=req.user
 
-    res.status(201).json({
-data: {name, email, isActive , role}
+    res.status(200).json({
+data: {_id,name, email, isActive , role}
     })
 
 })

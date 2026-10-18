@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const teamSchema = new mongoose.Schema(
   {
     name: {
-      type: "String",
+      type: String,
       unique: true,
       maxLength: 50,
       required: true,
