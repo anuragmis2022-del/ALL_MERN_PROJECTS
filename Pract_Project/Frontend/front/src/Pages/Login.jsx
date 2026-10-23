@@ -1,4 +1,5 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { useState } from "react";
 import toast from "react-hot-toast";
 import {
@@ -11,11 +12,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import api from "../Utils/api";
+import { addUserData } from "../Utils/Redux/UserSlice";
 // import { getErrorMessage } from "../Utils/helpers";
 import Dashboard from "./Dashboard";
 
 const Login = () => {
   const nav = useNavigate();
+  const dispatch = useDispatch();
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -41,7 +44,8 @@ const Login = () => {
 
     api
       .post("/api/auth/login", formData)
-      .then(() => {
+      .then((res) => {
+        dispatch(addUserData(res.data.data));
         nav("/Dashboard");
       })
       .catch((error) => {
@@ -110,7 +114,7 @@ const Login = () => {
             </div>
 
             <p className="text-sm text-slate-500">
-              © 2026 TeamFlow. All rights reserved.
+              Â© 2026 TeamFlow. All rights reserved.
             </p>
 
           </div>
