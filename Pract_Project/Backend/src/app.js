@@ -8,8 +8,6 @@ const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const http = require("http");
 const { Server } = require("socket.io");
-const { addUser } = require("./Utils/AddOwner");
-
 const { AuthRouter } = require("./Routes/auth.routes");
 const { OwnerRouter } = require("./Routes/owner.routes");
 const { adminRouter } = require("./Routes/admin.routes");
@@ -111,15 +109,8 @@ app.use((err, req, res, next) => {
 
 // 8. Database and server
 mongoose.connect(process.env.DB_URL)
-  .then(async () => {
+  .then(() => {
     console.log("Database connected");
-
-    // Temporary owner creation
-    await addUser({
-      name: process.env.OWNER_NAME,
-      email: process.env.OWNER_EMAIL,
-      password: process.env.OWNER_PASSWORD,
-    });
 
     server.listen(process.env.PORT || 8080, () => {
       console.log("Server running");
