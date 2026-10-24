@@ -8,7 +8,7 @@ const validator = require("validator");
 const router = express.Router();
 const bcrypt = require("bcrypt");
 const { User } = require("../Model/User.Schema");
-const {Task}=require("../Model/Task.Schema")
+const { Task } = require("../Model/Task.Schema");
 
 router.post("/teams", isLoggedIn, authorize("admin"), async (req, res) => {
   const { name } = req.body;
@@ -33,7 +33,9 @@ router.get("/teams", isLoggedIn, authorize("admin"), async (req, res) => {
   const organizationId = req.user.organizationId._id;
 
   // console.log("organizationid", organizationId);
-  const foundTeams = await Team.find({ organizationId }).sort({createdAt:-1});
+  const foundTeams = await Team.find({ organizationId }).sort({
+    createdAt: -1,
+  });
 
   if (!foundTeams) {
     throw new AppError(401, "Organization does not have any have teams ");
@@ -41,7 +43,7 @@ router.get("/teams", isLoggedIn, authorize("admin"), async (req, res) => {
 
   res.status(201).json({
     msg: "All teams are shown below of the specific organizations",
-    data:foundTeams,
+    data: foundTeams,
   });
 });
 
@@ -53,7 +55,7 @@ router.get("/teams/:id", isLoggedIn, authorize("admin"), async (req, res) => {
 
   // console.log("organizationid", organizationId);
   const foundTeams = await Team.findOne({
-    _id:id,
+    _id: id,
     organizationId: req.user.organizationId._id,
   });
 
@@ -74,7 +76,7 @@ router.delete(
   isLoggedIn,
   authorize("admin"),
   async (req, res) => {
-    const {id } = req.params;
+    const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       throw new AppError(400, "Invalid ID");
@@ -113,7 +115,7 @@ router.patch("/teams/:id", isLoggedIn, authorize("admin"), async (req, res) => {
   const updatedUser = await Team.findOneAndUpdate(
     { _id: id, organizationId: req.user.organizationId._id },
     { name: name.trim(), isActive: isActive ?? true },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   );
 
   if (!updatedUser) throw new AppError(404, "Team not found");
@@ -171,7 +173,8 @@ router.post(
 
     const hashPassword = await bcrypt.hash(password, 10);
 
-    if (await User.findOne({ email: email.toLowerCase() })) throw new AppError(409, "Email is already registered");
+    if (await User.findOne({ email: email.toLowerCase() }))
+      throw new AppError(409, "Email is already registered");
 
     const createdEmployee = await User.create({
       name: name.trim(),
@@ -188,7 +191,6 @@ router.post(
     });
   },
 );
-
 
 router.get(
   "/teams/:teamId/employees",
@@ -222,8 +224,6 @@ router.get(
     });
   },
 );
-
-
 
 router.delete(
   "/employees/:employeeId",
@@ -301,7 +301,9 @@ router.post(
 
     const foundEmployee = await User.findOne({
       _id: employeeId,
-      role: "employee", isActive: true, teamId: { $ne: null },
+      role: "employee",
+      isActive: true,
+      teamId: { $ne: null },
       organizationId: req.user.organizationId._id,
     });
 
@@ -312,7 +314,7 @@ router.post(
       );
     }
 
-    console.log("Found Employeee-",foundEmployee)
+    console.log("Found Employeee-", foundEmployee);
 
     const { title, description, status, priority } = req.body;
 
@@ -327,11 +329,9 @@ router.post(
       throw new AppError(401, "Invalid Status");
     }
 
-
     if (!priority || !["low", "medium", "high"].includes(priority)) {
       throw new AppError(401, "Invalid priority");
     }
-
 
     const createdTask = await Task.create({
       title,
@@ -340,12 +340,12 @@ router.post(
       priority,
       organizationId: req.user.organizationId._id,
       teamId: foundEmployee.teamId,
-      adminId:req.user._id,
+      adminId: req.user._id,
       assignedTo: employeeId,
       createdBy: req.user._id,
     });
 
-console.log("createdtask...", createdTask)
+    console.log("createdtask...", createdTask);
 
     res.status(201).json({
       msg: "task completed succesfully",
@@ -353,162 +353,132 @@ console.log("createdtask...", createdTask)
     });
   },
 );
-(
-
-router.get("/alltask",isLoggedIn, authorize("employee"), async(req, res)=>{
-
-
-const foundAllTask=await Task.find({
-assignedTo: req.user._id, organizationId:req.user.organizationId._id
-})
-
-res.status(201).json({
-  msg:"All task are stated below", 
-  foundAllTask
-})
-
-} ))
-
-router.get("/task/:taskId", isLoggedIn, authorize("employee"), async(req, res)=>{
-
-  const {taskId}=req.params
-
-  const foundtask=await Task.findOne({
-    _id:taskId, 
-    organizationId:req.user.organizationId._id, 
-
-  })
-
-  if(!foundtask)
-  {
-    throw new AppError(401, "Task not found")
-  }
+router.get("/alltask", isLoggedIn, authorize("employee"), async (req, res) => {
+  const foundAllTask = await Task.find({
+    assignedTo: req.user._id,
+    organizationId: req.user.organizationId._id,
+  });
 
   res.status(201).json({
-    data:foundtask
-  })
-})
+    msg: "All task are stated below",
+    foundAllTask,
+  });
+});
 
-router.patch("/task/:taskId", isLoggedIn, authorize("employee"), async(req, res)=>{
+router.get(
+  "/task/:taskId",
+  isLoggedIn,
+  authorize("employee"),
+  async (req, res) => {
+    const { taskId } = req.params;
 
-const {taskId}=req.params
-const {title,description, status, priority}=req.body
+    const foundtask = await Task.findOne({
+      _id: taskId,
+      organizationId: req.user.organizationId._id,
+    });
 
+    if (!foundtask) {
+      throw new AppError(401, "Task not found");
+    }
 
-const taskChecking=await Task.findOne({
-   _id:taskId,
-  organizationId:req.user.organizationId._id, 
+    res.status(201).json({
+      data: foundtask,
+    });
+  },
+);
 
-})
+router.patch(
+  "/task/:taskId",
+  isLoggedIn,
+  authorize("employee"),
+  async (req, res) => {
+    const { taskId } = req.params;
+    const { title, description, status, priority } = req.body;
 
-if(!taskChecking)
-{
-  throw new AppError(401, "Invalid Task Id ")
-}
+    const taskChecking = await Task.findOne({
+      _id: taskId,
+      organizationId: req.user.organizationId._id,
+    });
 
-if (status && !["todo", "in-progress", "completed"].includes(status)) throw new AppError(400, "Invalid status");
-const updatedTask=await Task.findOneAndUpdate({ _id: taskId, assignedTo: req.user._id },
-  { status }, { new: true, runValidators: true })
+    if (!taskChecking) {
+      throw new AppError(401, "Invalid Task Id ");
+    }
 
-res.status(200).json({
-  msg:"Task updated", 
-  data:updatedTask
-})
+    if (status && !["todo", "in-progress", "completed"].includes(status))
+      throw new AppError(400, "Invalid status");
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: taskId, assignedTo: req.user._id },
+      { status },
+      { new: true, runValidators: true },
+    );
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-})
+    res.status(200).json({
+      msg: "Task updated",
+      data: updatedTask,
+    });
+  },
+);
 
 // router.delete("/task/:taskId", isLoggedIn, authorize, async(req, res)=>{
 
 // })
 
-router.post(
-  "/employees",
-  isLoggedIn,
-  authorize("admin"),
-  async (req, res) => {
-    const { name, email, password } = req.body;
+router.post("/employees", isLoggedIn, authorize("admin"), async (req, res) => {
+  const { name, email, password } = req.body;
 
-    if (!name || name.trim().length < 2 || name.trim().length > 20) {
-      throw new AppError(400, "Invalid employee name");
-    }
-
-    if (!email || !validator.isEmail(email)) {
-      throw new AppError(400, "Invalid email");
-    }
-
-    if (!password || !validator.isStrongPassword(password)) {
-      throw new AppError(400, "Password is not strong enough");
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    const existingEmployee = await User.findOne({
-      email: normalizedEmail,
-    });
-
-    if (existingEmployee) {
-      throw new AppError(409, "Email is already registered");
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const employee = await User.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      password: hashedPassword,
-      role: "employee",
-      organizationId: req.user.organizationId._id,
-      // No teamId: employee is initially unassigned.
-    });
-
-    res.status(201).json({
-      message: "Employee created successfully",
-      data: employee,
-    });
+  if (!name || name.trim().length < 2 || name.trim().length > 20) {
+    throw new AppError(400, "Invalid employee name");
   }
-);
 
-
-
-
-router.get(
-  "/employees",
-  isLoggedIn,
-  authorize("admin"),
-  async (req, res) => {
-    const employees = await User.find({
-      organizationId: req.user.organizationId._id,
-      role: "employee",
-      isActive: true,
-    })
-      .select("-password")
-      .populate("teamId", "name");
-
-    res.status(200).json({
-      message: "Organization employees",
-      data: employees,
-    });
+  if (!email || !validator.isEmail(email)) {
+    throw new AppError(400, "Invalid email");
   }
-);
 
+  if (!password || !validator.isStrongPassword(password)) {
+    throw new AppError(400, "Password is not strong enough");
+  }
 
+  const normalizedEmail = email.trim().toLowerCase();
 
+  const existingEmployee = await User.findOne({
+    email: normalizedEmail,
+  });
+
+  if (existingEmployee) {
+    throw new AppError(409, "Email is already registered");
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const employee = await User.create({
+    name: name.trim(),
+    email: normalizedEmail,
+    password: hashedPassword,
+    role: "employee",
+    organizationId: req.user.organizationId._id,
+    // No teamId: employee is initially unassigned.
+  });
+
+  res.status(201).json({
+    message: "Employee created successfully",
+    data: employee,
+  });
+});
+
+router.get("/employees", isLoggedIn, authorize("admin"), async (req, res) => {
+  const employees = await User.find({
+    organizationId: req.user.organizationId._id,
+    role: "employee",
+    isActive: true,
+  })
+    .select("-password")
+    .populate("teamId", "name");
+
+  res.status(200).json({
+    message: "Organization employees",
+    data: employees,
+  });
+});
 
 router.patch(
   "/teams/:teamId/employees/:employeeId",
@@ -560,14 +530,8 @@ router.patch(
         teamId: employee.teamId,
       },
     });
-  }
+  },
 );
-
-
-
-
-
-
 
 module.exports = {
   adminRouter: router,

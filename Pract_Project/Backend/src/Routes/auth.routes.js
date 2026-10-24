@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
 
 const { AppError } = require("../Utils/AppError");
@@ -7,6 +7,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { isLoggedIn } = require("../Middleware/isLoggedIn");
 
+// Cookie settings
 const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -14,6 +15,7 @@ const cookieOptions = {
     process.env.NODE_ENV === "production" ? "none" : "lax",
 };
 
+// LOGIN
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -48,11 +50,13 @@ router.post("/login", async (req, res) => {
     { expiresIn: "1d" }
   );
 
+  // Send the JWT in a cookie
   res.cookie("token", token, {
     ...cookieOptions,
     maxAge: 24 * 60 * 60 * 1000,
   });
 
+  // Return safe user details, not the password hash
   res.status(200).json({
     msg: "Login successfully",
     data: {
@@ -65,18 +69,28 @@ router.post("/login", async (req, res) => {
   });
 });
 
+// LOGOUT
 router.post("/logout", (req, res) => {
   res
     .clearCookie("token", cookieOptions)
     .status(200)
-    .json({ msg: "Logged out successfully" });
+    .json({
+      msg: "Logged out successfully",
+    });
 });
 
+// GET LOGGED-IN USER
 router.get("/me", isLoggedIn, async (req, res) => {
   const { _id, name, email, isActive, role } = req.user;
 
   res.status(200).json({
-    data: { _id, name, email, isActive, role },
+    data: {
+      _id,
+      name,
+      email,
+      isActive,
+      role,
+    },
   });
 });
 

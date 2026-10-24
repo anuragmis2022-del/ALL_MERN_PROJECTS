@@ -1,79 +1,130 @@
+
 require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const http = require("http");
 const { Server } = require("socket.io");
+const { addUser } = require("./Utils/AddOwner");
+
 const { AuthRouter } = require("./Routes/auth.routes");
 const { OwnerRouter } = require("./Routes/owner.routes");
 const { adminRouter } = require("./Routes/admin.routes");
 const { employeeRouter } = require("./Routes/employee.route");
 const { Analytics } = require("./Routes/getAnalytics.route..js");
 const { chatRouter } = require("./Routes/Chat.Route.js");
+const { User } = require("./Model/User.Schema");
 
-const cors = require("cors");
-// const { addUser } = require("./Utils/AddOwner");
-const cp = require("cookie-parser");
 const app = express();
 const server = http.createServer(app);
 
+// 1. Allowed frontend URLs
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://teamflow-frontend-p2qn.onrender.com",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+// 2. Middlewares
+app.use(express.json());
+app.use(cookieParser());
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+
+// 3. Socket.IO setup
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     credentials: true,
   },
 });
 
 app.set("io", io);
 
+// 4. Check login token for chat
+io.use(async (socket, next) => {
+  try {
+    const cookieHeader = socket.handshake.headers.cookie || "";
 
+    const cookies = cookieParser.JSONCookies(
+      require("cookie").parse(cookieHeader)
+    );
+
+    const token = cookies.token;
+
+    if (!token) {
+      return next(new Error("Please login first"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id);
+
+    if (!user || !user.isActive) {
+      return next(new Error("Invalid user"));
+    }
+
+    socket.userId = user._id.toString();
+
+    next();
+
+  } catch (error) {
+    next(new Error("Authentication failed"));
+  }
+});
+
+// 5. Real-time chat connection
 io.on("connection", (socket) => {
-  console.log("USER CONNECTED:", socket.id);
 
-  socket.on("join", (userId) => {
-    socket.join(userId);
+  console.log("User connected:", socket.userId);
 
-    console.log("USER JOINED:", userId);
-  });
+  socket.join(socket.userId);
 
   socket.on("disconnect", () => {
-    console.log("USER DISCONNECTED:", socket.id);
+    console.log("User disconnected:", socket.userId);
   });
+
 });
-app.use(cp());
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true, // allowing browser to request cookies
-  }),
-);
-
-app.use(express.json());
+// 6. API routes
 app.use("/api/auth", AuthRouter);
 app.use("/api/owner", OwnerRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/employee", employeeRouter);
 app.use("/api/analytics", Analytics);
 app.use("/api/chat", chatRouter);
-mongoose
-  .connect(process.env.DB_URL)
-  .then(() => {
-    //  addUser("Anurag", "Annurag@gmail.com" , "Testing123!" ,"owner");
+
+// 7. Error handling
+app.use((err, req, res, next) => {
+  console.log(err.message);
+
+  res.status(err.statusCode || 500).json({
+    message: err.message || "Internal Server Error",
+  });
+});
+
+// 8. Database and server
+mongoose.connect(process.env.DB_URL)
+  .then(async () => {
     console.log("Database connected");
 
-    const PORT = process.env.PORT || 8080;
+    // Temporary owner creation
+    await addUser({
+      name: process.env.OWNER_NAME,
+      email: process.env.OWNER_EMAIL,
+      password: process.env.OWNER_PASSWORD,
+    });
 
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    server.listen(process.env.PORT || 8080, () => {
+      console.log("Server running");
     });
   })
   .catch((error) => {
-    console.log(`DB Connection failed : ${error.message}`);
+    console.log("Startup error:", error.message);
   });
-
-app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.statusCode || err.status || 500).json({
-    message: err.message || "Internal server error",
-  });
-});
