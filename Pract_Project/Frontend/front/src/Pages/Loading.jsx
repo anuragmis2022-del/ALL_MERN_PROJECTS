@@ -1,52 +1,107 @@
+import React, { useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import toast from "react-hot-toast";
+import { addUserData } from "../Utils/Redux/UserSlice";
+import Dashboard from "./Dashboard";
 
-import { Users } from "lucide-react";
+function Login() {
+  const nav = useNavigate();
+  const dispatch = useDispatch();
 
-const Loading = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+    <div className="min-h-screen flex justify-center items-center bg-gray-100">
+      <div className="bg-white p-8 rounded-xl shadow-lg w-96">
 
-      <div className="w-full max-w-sm rounded-3xl bg-white border border-slate-200 shadow-xl p-10 text-center">
+        <h1 className="text-2xl font-bold mb-6 text-center">
+          TeamFlow Login
+        </h1>
 
-        {/* Logo */}
+        <label>Email</label>
 
-        <div className="mx-auto h-14 w-14 rounded-2xl bg-slate-900 flex items-center justify-center">
-          <Users
-            size={26}
-            className="text-white"
+        <input
+          type="email"
+          placeholder="Enter your email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+          }}
+          className="w-full border p-2 rounded mb-4"
+        />
+
+        <label>Password</label>
+
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Enter your password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+          }}
+          className="w-full border p-2 rounded mb-3"
+        />
+
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={(e) => {
+              setShowPassword(e.target.checked);
+            }}
           />
+
+          <span>Show Password</span>
         </div>
 
+        <button
+          type="button"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white p-2 rounded"
+          onClick={async () => {
 
-        {/* Brand */}
+            if (!email || !password) {
+              toast.error("Enter email and password");
+              return;
+            }
 
-        <h2 className="mt-5 text-xl font-bold text-slate-900">
-          TeamFlow
-        </h2>
+            setLoading(true);
 
+            try {
+              const res = await axios.post(
+                import.meta.env.VITE_BACKEND_URL + "/api/auth/login",
+                {
+                  email: email,
+                  password: password,
+                },
+                {
+                  withCredentials: true,
+                }
+              );
 
-        {/* Loader */}
+              dispatch(addUserData(res.data.data));
 
-        <div className="mt-7 flex justify-center">
+              nav("/Dashboard");
 
-          <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin" />
+            } catch (error) {
+              toast.error("Invalid Credentials");
+            }
 
-        </div>
+            setLoading(false);
 
-
-        {/* Message */}
-
-        <p className="mt-5 text-sm font-medium text-slate-700">
-          Loading your workspace
-        </p>
-
-        <p className="mt-1 text-xs text-slate-400">
-          Please wait while we verify your session...
-        </p>
+          }}
+        >
+          {loading ? "Logging in..." : "Login"}
+        </button>
 
       </div>
-
     </div>
   );
-};
+}
 
-export default Loading;
+export default Login;

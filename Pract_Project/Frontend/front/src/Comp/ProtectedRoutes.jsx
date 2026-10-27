@@ -1,29 +1,50 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { useDispatch } from "react-redux";
 import { Navigate, Outlet } from "react-router-dom";
-import api from "../Utils/api";
 import { addUserData } from "../Utils/Redux/UserSlice";
 import Loading from "../Pages/Loading";
 
-export default function ProtectedRoutes() {
+function ProtectedRoutes() {
   const dispatch = useDispatch();
+
   const [checking, setChecking] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-    api.get("/api/auth/me")
-      .then((res) => {
+    const checkLogin = async () => {
+      try {
+        const res = await axios.get(
+          import.meta.env.VITE_BACKEND_URL + "/api/auth/me",
+          {
+            withCredentials: true,
+          },
+        );
+
         dispatch(addUserData(res.data.data));
+
         setLoggedIn(true);
-      })
-      .catch(() => {
+      } catch (error) {
         dispatch(addUserData(null));
+
         setLoggedIn(false);
-      })
-      .finally(() => setChecking(false));
+      }
+
+      setChecking(false);
+    };
+
+    checkLogin();
   }, [dispatch]);
 
-  if (checking) return <Loading />;
-  if (!loggedIn) return <Navigate to="/login" replace />;
+  if (checking) {
+    return <Loading />;
+  }
+
+  if (!loggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+
   return <Outlet />;
 }
+
+export default ProtectedRoutes;
