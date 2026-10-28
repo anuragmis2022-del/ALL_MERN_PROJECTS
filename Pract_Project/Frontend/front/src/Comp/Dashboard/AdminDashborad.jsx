@@ -1,8 +1,10 @@
-import { BACKEND_URL } from "../../Utils/api.jsx";
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+
+import { BACKEND_URL } from "../../Utils/api.jsx";
+
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
@@ -14,81 +16,103 @@ import {
   MessageSquare,
 } from "lucide-react";
 
-const links = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/Dashboard" },
-  { label: "Teams", icon: Users, path: "/Teams" },
-  { label: "Employees", icon: UserRound, path: "/Employees" },
-  { label: "Tasks", icon: ClipboardList, path: "/Tasks" },
-  { label: "Messages", icon: MessageSquare, path: "/Messages" },
-];
-
 function AdminDashboard() {
   const navigate = useNavigate();
 
+  // Store dashboard data
   const [teams, setTeams] = useState([]);
   const [employees, setEmployees] = useState([]);
+
+  // Store search text
   const [searchTerm, setSearchTerm] = useState("");
 
-  const baseURL = BACKEND_URL;
+  const links = [
+    { label: "Dashboard", icon: LayoutDashboard, path: "/Dashboard" },
+    { label: "Teams", icon: Users, path: "/Teams" },
+    { label: "Employees", icon: UserRound, path: "/Employees" },
+    { label: "Tasks", icon: ClipboardList, path: "/Tasks" },
+    { label: "Messages", icon: MessageSquare, path: "/Messages" },
+  ];
 
+  // Fetch teams and employees
   useEffect(() => {
-    const loadDashboardData = async () => {
+    async function getData() {
       try {
-        const teamsResponse = await axios.get(
-          `${baseURL}/api/admin/teams`,
+        // Get all teams
+        const teamResponse = await axios.get(
+          `${BACKEND_URL}/api/admin/teams`,
           { withCredentials: true }
         );
 
-        const teamList = teamsResponse.data.data || [];
+        const teamList = teamResponse.data.data || [];
         setTeams(teamList);
+console.log(teamList  )
+        // Get employees from every team
+        const allEmployees = [];
 
-        // Load employees from each team.
-        const employeeResponses = await Promise.all(
-          teamList.map((team) =>
-            axios.get(
-              `${baseURL}/api/admin/teams/${team._id}/employees`,
-              { withCredentials: true }
-            )
-          )
-        );
+        for (const team of teamList) {
+          const employeeResponse = await axios.get(
+            `${BACKEND_URL}/api/admin/teams/${team._id}/employees`,
+            { withCredentials: true }
+          );
 
-        const allEmployees = employeeResponses.flatMap(
-          (response) => response.data.data || []
-        );
+          const employeeList = employeeResponse.data.data || [];
 
-        // Remove duplicates in case an employee appears more than once.
+          for (const employee of employeeList) {
+            allEmployees.push(employee);
+          }
+        }
+
+        // Remove duplicate employees
         const uniqueEmployees = [
           ...new Map(
-            allEmployees.map((employee) => [
-              employee._id,
-              employee,
-            ])
+            allEmployees.map((employee) => [employee._id, employee])
           ).values(),
         ];
 
         setEmployees(uniqueEmployees);
       } catch (error) {
-        console.error("DASHBOARD DATA ERROR:", error);
+        console.log("Dashboard error:", error);
       }
-    };
+    }
 
-    loadDashboardData();
+    getData();
   }, []);
 
+  // Prepare search text
   const search = searchTerm.trim().toLowerCase();
 
-  const filteredEmployees = employees.filter((employee) =>
-    (employee.name || "").toLowerCase().includes(search) ||
-    (employee.email || "").toLowerCase().includes(search)
-  );
+  // Find employees matching name or email
+  const filteredEmployees = employees.filter((employee) => {
+    const name = (employee.name || "").toLowerCase();
+    const email = (employee.email || "").toLowerCase();
 
+    return name.includes(search) || email.includes(search);
+  });
+
+  // Show all matching results when searching.
+  // Otherwise, show only the first five employees.
+  let displayEmployees = [];
+
+  if (search !== "") {
+    displayEmployees = filteredEmployees;
+  } else {
+    displayEmployees = filteredEmployees.slice(0, 5);
+  }
+
+  // Count active employees
   const activeEmployees = employees.filter(
     (employee) => employee.isActive
   ).length;
 
-  const activePercentage = employees.length
-    ? Math.round((activeEmployees / employees.length) * 100)
-    : 0;
+  // Calculate active employee percentage
+  let activePercentage = 0;
+
+  if (employees.length > 0) {
+    activePercentage = Math.round(
+      (activeEmployees / employees.length) * 100
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -164,37 +188,35 @@ function AdminDashboard() {
             </div>
           </div>
 
-          {/* Recent employees and search results */}
+          {/* Employees list */}
           <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white xl:col-span-2">
               <div className="flex items-center justify-between border-b border-gray-100 p-5">
                 <div>
                   <h2 className="text-sm font-bold text-gray-900">
-                    {searchTerm.trim()
+                    {search !== ""
                       ? "Employee Search Results"
                       : "Recent Employees"}
                   </h2>
+
                   <p className="mt-1 text-xs text-gray-400">
                     Search by employee name or email
                   </p>
                 </div>
 
                 <button onClick={() => navigate("/Employees?view=list")}>
-  View All
-</button>
+                  View All
+                </button>
               </div>
 
-              {filteredEmployees.length === 0 ? (
+              {displayEmployees.length === 0 ? (
                 <p className="p-8 text-center text-sm text-gray-400">
                   {employees.length === 0
                     ? "No employees found."
                     : "No employees match your search."}
                 </p>
               ) : (
-                (searchTerm.trim()
-                  ? filteredEmployees
-                  : filteredEmployees.slice(0, 5)
-                ).map((employee) => (
+                displayEmployees.map((employee) => (
                   <div
                     key={employee._id}
                     className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 last:border-0"

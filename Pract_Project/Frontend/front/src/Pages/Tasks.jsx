@@ -1,4 +1,4 @@
-import { BACKEND_URL } from "../Utils/api.jsx";
+  import { BACKEND_URL } from "../Utils/api.jsx";
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";

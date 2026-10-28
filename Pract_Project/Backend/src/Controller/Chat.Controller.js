@@ -9,7 +9,7 @@ const getCurrentUserId = (req) => {
   return req.user?._id || req.user?.id || null;
 };
 
-// Check whether a user can chat with another user.
+// Checking whether a user can chat with another user.
 // Return the authorized team document, not just true/false.
 const getAuthorizedTeam = async (currentUser, receiver) => {
   if (!currentUser || !receiver) return null;
@@ -190,7 +190,7 @@ const sendMessage = async (req, res, next) => {
     if (!context) return;
 
     const { currentUser, receiver, team } = context;
-    const { message, text, content } = req.body || {};
+    const { message, text, content } = req.body ;
 
     const messageText =
       typeof message === "string"

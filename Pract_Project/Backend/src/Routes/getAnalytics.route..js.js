@@ -1,90 +1,75 @@
+
 const express = require("express");
-const mongoose = require("mongoose");
 const { isLoggedIn } = require("../Middleware/isLoggedIn");
 const { authorize } = require("../Middleware/authorize");
 const { Organization } = require("../Model/Organization.schema");
 const { User } = require("../Model/User.Schema");
+
 const router = express.Router();
 
+// 1. Owner dashboard statistics
 router.get("/", isLoggedIn, authorize("owner"), async (req, res) => {
-  //   const totalOrganization = await Organization.countDocuments();
+  try {
+    const totalOrganization = await Organization.countDocuments();
 
-  const totalAdmins = await User.countDocuments({
-    role: "admin",
-  });
+    const activeOrganization = await Organization.countDocuments({
+      isActive: true,
+    });
 
+    const totalAdmins = await User.countDocuments({
+      role: "admin",
+    });
 
-
-
-
-
-  const demo = await Organization.aggregate([
-    {
-      $group: {
-        _id: null,
-        totalOrganization: {
-          $sum: 1,
-        },
-        activeOrganization: {
-          $sum: {
-            $cond: ["$isActive", 1, 0],
-          },
-        },
+    res.status(200).json({
+      data: {
+        totalOrganization,
+        activeOrganization,
+        totalAdmins,
       },
-    },
-  ]);
-
-  res.status(200).json({
-    data: {
-      ...demo[0],
-      totalAdmins,
-    },
-  });
+    });
+  } catch (err) {
+    res.status(500).json({
+      msg: "Failed to fetch analytics",
+    });
+  }
 });
 
+// 2. Get all organizations with their admin counts
+router.get(
+  "/all_Org_Admin",
+  isLoggedIn,
+  authorize("owner"),
+  async (req, res) => {
+    try {
+      const organizations = await Organization.find();
 
+      const data = [];
 
-router.get("/all_Org_Admin", isLoggedIn, authorize("owner"), async (req, res) => {
-  const data = await Organization.aggregate([
-    {
-      $lookup: {
-        from: "users",
-        localField: "_id",
-        foreignField: "organizationId",
-        as: "admins",
-      },
-    },
-    {
-      $addFields: {
-        adminCount: {
-          $size: {
-            $filter: {
-              input: "$admins",
-              as: "admin",
-              cond: {
-                $eq: ["$$admin.role", "admin"],
-              },
-            },
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        name: 1,
-        isActive: 1,
-        createdAt: 1,
-        adminCount: 1,
-      },
-    },
-  ]);
+      for (let org of organizations) {
+        const adminCount = await User.countDocuments({
+          organizationId: org._id,
+          role: "admin",
+        });
 
-  res.status(200).json({
-    data,
-  });
-});
+        data.push({
+          _id: org._id,
+          name: org.name,
+          isActive: org.isActive,
+          createdAt: org.createdAt,
+          adminCount,
+        });
+      }
 
-
+      res.status(200).json({
+        data,
+      });
+    } catch (err) {
+      res.status(500).json({
+        msg: "Failed to fetch organizations",
+      });
+    }
+  }
+);
 
 module.exports = {
   Analytics: router,

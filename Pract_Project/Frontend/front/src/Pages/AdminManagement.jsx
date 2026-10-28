@@ -36,138 +36,63 @@ function AdminManagement() {
 
   const [loading, setLoading] = useState(false);
 
-  // Load organizations
-  const loadOrganizations = async () => {
-    try {
-      const res = await axios.get(
-        BACKEND_URL + "/api/owner/",
-        { withCredentials: true }
-      );
+  // Get organizations when the page opens
+  useEffect(() => {
+    const getOrganizations = async () => {
+      try {
+        const res = await axios.get(
+          BACKEND_URL + "/api/owner/",
+          { withCredentials: true }
+        );
 
-      const list = res.data.data || [];
-
-      setOrganizations(list);
-
-      if (list.length > 0) {
-        setOrganizationId((previousId) =>
-          previousId || list[0]._id
+        setOrganizations(res.data.data || []);
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message || "Could not load organizations"
         );
       }
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Could not load organizations"
-      );
-    }
-  };
+    };
 
-  // Load admins for selected organization
-  const loadAdmins = async (id) => {
-    if (!id) {
-      setAdmins([]);
-      return;
-    }
-
-    try {
-      const res = await axios.get(
-        BACKEND_URL +
-          "/api/owner/organization/" +
-          id +
-          "/admin",
-        { withCredentials: true }
-      );
-
-      setAdmins(res.data.data || []);
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Could not load admins"
-      );
-    }
-  };
-
-  useEffect(() => {
-    loadOrganizations();
+    getOrganizations();
   }, []);
 
+  // Get admins when an organization is selected
   useEffect(() => {
-    loadAdmins(organizationId);
+    const getAdmins = async () => {
+      if (!organizationId) {
+        setAdmins([]);
+        return;
+      }
+
+      try {
+        const res = await axios.get(
+          BACKEND_URL +
+            "/api/owner/organization/" +
+            organizationId +
+            "/admin",
+          { withCredentials: true }
+        );
+
+        setAdmins(res.data.data || []);
+      } catch (error) {
+        toast.error(
+          error.response?.data?.message || "Could not load admins"
+        );
+      }
+    };
+
+    getAdmins();
   }, [organizationId]);
 
-  // Handle name, email and password input
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
+  // Update form when the user types
+  const handleChange = (e) => {
+    setForm({
+      ...form,
+      [e.target.name]: e.target.value,
+    });
   };
 
-  // Create admin
-  const createAdmin = async (e) => {
-    e.preventDefault();
-
-    if (!organizationId) {
-      toast.error("Create an organization first");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await axios.post(
-        BACKEND_URL +
-          "/api/owner/organization/" +
-          organizationId +
-          "/admin",
-        form,
-        { withCredentials: true }
-      );
-
-      toast.success("Admin created successfully");
-
-      setForm({
-        name: "",
-        email: "",
-        password: "",
-      });
-
-      await loadAdmins(organizationId);
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Could not create admin"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Activate or deactivate admin
-  const toggleAdmin = async (admin) => {
-    try {
-      await axios.patch(
-        BACKEND_URL + "/api/owner/admin/" + admin._id,
-        {
-          isActive: !admin.isActive,
-        },
-        {
-          withCredentials: true,
-        }
-      );
-
-      toast.success("Admin status updated");
-
-      await loadAdmins(organizationId);
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Could not update admin"
-      );
-    }
-  };
-
+  // Allow only owners to access this page
   if (user && user.role !== "owner") {
     return <Navigate to="/Dashboard" replace />;
   }
@@ -192,40 +117,85 @@ function AdminManagement() {
             Create an admin account for an organization.
           </p>
 
-          {/* Create Admin */}
+          {/* Organization selection and admin form */}
           <div className="my-6 rounded-xl border bg-white p-5">
             <label className="mb-2 block text-sm font-semibold">
               Organization
             </label>
 
             <select
+              className="mb-4 w-full rounded border p-2"
               value={organizationId}
-              onChange={(e) =>
-                setOrganizationId(e.target.value)
-              }
-              className="mb-4 w-full rounded-lg border px-3 py-2"
+              onChange={(e) => setOrganizationId(e.target.value)}
+              required
             >
-              <option value="">
-                Select organization
+              <option value="" disabled>
+                Please select an organization
               </option>
 
               {organizations.map((org) => (
-                <option
-                  key={org._id}
-                  value={org._id}
-                >
+                <option key={org._id} value={org._id}>
                   {org.name}
-                  {org.isActive ? "" : " (inactive)"}
                 </option>
               ))}
             </select>
 
+            {!organizationId && (
+              <p className="mb-4 text-sm text-amber-600">
+                Please select an organization first.
+              </p>
+            )}
+
             <form
-              onSubmit={createAdmin}
               autoComplete="off"
               className="grid gap-3 md:grid-cols-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+
+                if (!organizationId) {
+                  toast.error("Please select an organization");
+                  return;
+                }
+
+                setLoading(true);
+
+                try {
+                  await axios.post(
+                    BACKEND_URL +
+                      "/api/owner/organization/" +
+                      organizationId +
+                      "/admin",
+                    form,
+                    { withCredentials: true }
+                  );
+
+                  toast.success("Admin created successfully");
+
+                  setForm({
+                    name: "",
+                    email: "",
+                    password: "",
+                  });
+
+                  // Refresh admin list
+                  const res = await axios.get(
+                    BACKEND_URL +
+                      "/api/owner/organization/" +
+                      organizationId +
+                      "/admin",
+                    { withCredentials: true }
+                  );
+
+                  setAdmins(res.data.data || []);
+                } catch (error) {
+                  toast.error(
+                    error.response?.data?.message || "Could not create admin"
+                  );
+                } finally {
+                  setLoading(false);
+                }
+              }}
             >
-              {/* Admin Name */}
               <input
                 required
                 type="text"
@@ -233,31 +203,29 @@ function AdminManagement() {
                 minLength={2}
                 maxLength={20}
                 value={form.name}
-                onChange={handleFormChange}
+                onChange={handleChange}
                 placeholder="Admin name"
                 autoComplete="off"
                 className="rounded-lg border px-3 py-2"
               />
 
-              {/* Admin Email */}
               <input
                 required
                 type="email"
                 name="email"
                 value={form.email}
-                onChange={handleFormChange}
+                onChange={handleChange}
                 placeholder="Admin email"
                 autoComplete="off"
                 className="rounded-lg border px-3 py-2"
               />
 
-              {/* Admin Password */}
               <input
                 required
                 type="password"
                 name="password"
                 value={form.password}
-                onChange={handleFormChange}
+                onChange={handleChange}
                 placeholder="Strong password"
                 autoComplete="new-password"
                 className="rounded-lg border px-3 py-2"
@@ -273,13 +241,17 @@ function AdminManagement() {
             </form>
           </div>
 
-          {/* Admin List */}
+          {/* Admin list */}
           <div className="overflow-hidden rounded-xl border bg-white">
             <div className="border-b p-5 font-semibold">
               Admins in selected organization
             </div>
 
-            {admins.length === 0 ? (
+            {!organizationId ? (
+              <p className="p-6 text-sm text-gray-500">
+                Select an organization to view its admins.
+              </p>
+            ) : admins.length === 0 ? (
               <p className="p-6 text-sm text-gray-500">
                 No admins found for this organization.
               </p>
@@ -290,13 +262,8 @@ function AdminManagement() {
                   className="flex items-center justify-between gap-3 border-b p-5 last:border-0"
                 >
                   <div>
-                    <p className="font-semibold">
-                      {admin.name}
-                    </p>
-
-                    <p className="text-sm text-gray-500">
-                      {admin.email}
-                    </p>
+                    <p className="font-semibold">{admin.name}</p>
+                    <p className="text-sm text-gray-500">{admin.email}</p>
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -307,19 +274,41 @@ function AdminManagement() {
                           : "bg-red-50 text-red-700"
                       }`}
                     >
-                      {admin.isActive
-                        ? "Active"
-                        : "Inactive"}
+                      {admin.isActive ? "Active" : "Inactive"}
                     </span>
 
                     <button
                       type="button"
-                      onClick={() => toggleAdmin(admin)}
                       className="rounded-lg border px-3 py-2 text-sm"
+                      onClick={async () => {
+                        try {
+                          await axios.patch(
+                            BACKEND_URL + "/api/owner/admin/" + admin._id,
+                            { isActive: !admin.isActive },
+                            { withCredentials: true }
+                          );
+
+                          toast.success("Admin status updated");
+
+                          // Refresh admin list
+                          const res = await axios.get(
+                            BACKEND_URL +
+                              "/api/owner/organization/" +
+                              organizationId +
+                              "/admin",
+                            { withCredentials: true }
+                          );
+
+                          setAdmins(res.data.data || []);
+                        } catch (error) {
+                          toast.error(
+                            error.response?.data?.message ||
+                              "Could not update admin"
+                          );
+                        }
+                      }}
                     >
-                      {admin.isActive
-                        ? "Deactivate"
-                        : "Activate"}
+                      {admin.isActive ? "Deactivate" : "Activate"}
                     </button>
                   </div>
                 </div>
