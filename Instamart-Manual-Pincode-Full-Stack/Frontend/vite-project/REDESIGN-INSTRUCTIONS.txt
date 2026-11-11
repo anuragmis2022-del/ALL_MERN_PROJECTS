@@ -1,0 +1,27 @@
+QUICK COMMERCE STOCK WATCHER - FRONTEND UPDATE
+
+1. Back up your existing Frontend/vite-project folder.
+2. Replace its source/config files with the contents of this folder. Do not copy node_modules.
+3. Open a terminal inside vite-project and run:
+   npm install
+   npm run dev
+
+WHAT CHANGED
+- Dashboard remains the overview page.
+- Products menu now opens the My Products section on Dashboard instead of showing a duplicate Dashboard page.
+- Dashboard Add Product button scrolls to the Add New Product form and focuses Product Name.
+- Product list has a mobile card layout with visible Check Now, Edit and Delete actions.
+- Monitoring Logs and Price History also have mobile-friendly record cards.
+- The non-working bell icon was replaced with a link to Monitoring Logs.
+- The Price Trend chart can be filtered by product and uses actual price-bearing monitoring log records.
+- Pincode input accepts digits only and has an optional browser-location lookup. The browser asks permission only after the user clicks the button. Review the detected pincode; manual entry remains available.
+- Demo labels were corrected to match the current backend behavior: successful checks save a price read from the configured product page; automatic stock detection is not implemented in the current backend.
+- Price History table no longer shows a Stock Status column because the current PriceHistory schema does not save stock status.
+
+IMPORTANT LIMITATIONS
+- Backend APIs and CRUD methods were not changed.
+- The current backend does not implement administrator authentication, signup, or login. The Administrator label is only a display label, not a protected account.
+- The current backend price checker looks for a rupee price in the product page title. A site that does not expose a supported price there may fail the check.
+- The current backend Check Now operation updates price/history, but does not detect or update in-stock/out-of-stock status.
+- Browser location lookup requires a secure context (localhost or HTTPS), browser permission, and a successful reverse-geocoding response. If it fails, enter the six-digit pincode manually.
+- No node_modules folder is included. Run npm install on your computer.

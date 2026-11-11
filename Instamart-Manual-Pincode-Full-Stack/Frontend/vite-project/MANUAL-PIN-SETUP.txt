@@ -1,0 +1,13 @@
+INSTAMART QUICK-COMMERCE STOCK WATCHER
+
+Location input is MANUAL PIN CODE ONLY. The form defaults to 201001.
+Browser automatic location detection has been removed.
+The backend converts the entered Indian PIN code to approximate coordinates,
+requests Instamart location selection, reads podDetails.podId, then requests
+the product using its Spin ID and resolved Store ID.
+
+Frontend: cd Frontend/vite-project && npm install && npm run dev
+Backend: cd Backend/Backend_3 && npm install, configure .env, then npm run dev
+Set VITE_API_URL=http://localhost:5000/api in the frontend .env if needed.
+Set MONGO_URI, ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET and FRONTEND_URL in backend .env.
+INSTAMART_COOKIE is optional and must remain private if required by Instamart.

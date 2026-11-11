@@ -1,0 +1,25 @@
+ADMIN LOGIN - SETUP
+
+1. In the Backend folder, run: npm install
+   This installs bcryptjs, cookie-parser and jsonwebtoken along with existing dependencies.
+2. Create Backend/.env using .env.example as a guide. Keep your real .env private and never upload it.
+3. Set MONGO_URI, ADMIN_EMAIL, ADMIN_PASSWORD and JWT_SECRET. Use a strong, unique password and a long random JWT_SECRET.
+4. Set FRONTEND_URL to the exact frontend origin. For local development use http://localhost:5173.
+5. Start backend: npm run dev
+6. Start frontend: npm run dev
+7. Open http://localhost:5173/login and sign in using ADMIN_EMAIL and ADMIN_PASSWORD.
+
+There is no public signup. The admin credentials are configured in the backend environment. The password is hashed with bcrypt in memory when the backend starts; no admin password is saved in MongoDB.
+
+AUTH ENDPOINTS
+POST /api/auth/login  - validates the configured admin and sets an HTTP-only JWT cookie
+POST /api/auth/logout - clears the cookie
+GET  /api/auth/me     - returns the logged-in admin if the cookie is valid
+
+All /api/products routes are protected by the admin middleware. The existing product CRUD, price history, monitoring logs and automatic 15-minute price-check scheduler are retained.
+
+LOCAL VS PRODUCTION
+For local development, NODE_ENV=development uses SameSite=Lax and non-secure cookies. For a production deployment where frontend and backend are on different HTTPS origins, set NODE_ENV=production and FRONTEND_URL to the exact frontend URL; the cookie uses Secure and SameSite=None. Ensure the hosting platform serves both sites over HTTPS.
+
+NOTE
+This is a single-admin environment-based login, not a multi-user account system. Keep JWT_SECRET and ADMIN_PASSWORD private.
