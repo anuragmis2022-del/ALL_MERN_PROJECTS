@@ -3,7 +3,7 @@
   const express = require("express");
   const cors = require("cors");
   const mongoose = require("mongoose");
-  const dns = require("dns");
+  // const dns = require("dns");
   const cookieParser = require("cookie-parser");
 
   const { ProductRouter } = require("./Routes/ProductRoutes");
@@ -12,7 +12,7 @@
   const Product = require("./Model/ProductSchema");
   const { checkProductPrice } = require("./Controller/ProductController");
 
-  dns.setServers(["8.8.8.8", "8.8.4.4"]);
+  // dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
   const app = express();
   const allowedOrigins = ["http://localhost:5173", process.env.FRONTEND_URL].filter(Boolean);
