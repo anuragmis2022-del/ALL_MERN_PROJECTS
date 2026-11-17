@@ -1,6 +1,7 @@
 
 const axios = require("axios");
-
+const { trackStockStatusChange } = require("../Services/stockService");
+const StockHistory = require("../Model/StockHistory");
 const Product = require("../Model/ProductSchema");
 const PriceHistory = require("../Model/PriceHistorySchema");
 const MonitoringLog = require("../Model/MonitoringLogSchema");
@@ -12,7 +13,9 @@ const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
 
 
-// 1. EXTRACT SPIN ID
+// =====================================================
+// 1. EXTRACT INSTAMART SPIN ID
+// =====================================================
 
 const getInstamartSpinId = (productUrl) => {
   try {
@@ -32,60 +35,9 @@ const getInstamartSpinId = (productUrl) => {
 };
 
 
-// 2. EXTRACT POD IDs WITH THEIR JSON PATHS
-
-const findPodIdsWithPaths = (
-  value,
-  results = [],
-  path = "data",
-  depth = 0
-) => {
-  if (!value || typeof value !== "object" || depth > 20) {
-    return results;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      findPodIdsWithPaths(
-        item,
-        results,
-        `${path}[${index}]`,
-        depth + 1
-      );
-    });
-
-    return results;
-  }
-
-  for (const [key, child] of Object.entries(value)) {
-    if (
-      key.toLowerCase() === "podid" &&
-      child !== null &&
-      child !== undefined &&
-      String(child).trim() !== ""
-    ) {
-      results.push({
-        value: String(child).trim(),
-        path: `${path}.${key}`,
-      });
-    }
-
-    if (child && typeof child === "object") {
-      findPodIdsWithPaths(
-        child,
-        results,
-        `${path}.${key}`,
-        depth + 1
-      );
-    }
-  }
-
-  return results;
-};
-
-
-// 3. AUTOMATIC PINCODE → POD ID RESOLUTION
-
+// =====================================================
+// 2. RESOLVE PIN CODE TO INSTAMART STORE ID
+// =====================================================
 
 const resolveInstamartStoreId = async (pincode) => {
   const pin = String(pincode || "").trim();
@@ -96,8 +48,7 @@ const resolveInstamartStoreId = async (pincode) => {
 
   console.log("Resolving Instamart location for:", pin);
 
-  // Step 1: Get coordinates from pincode.
-
+  // Step 1: Get latitude and longitude from the PIN code.
   const geoResponse = await axios.get(
     "https://nominatim.openstreetmap.org/search",
     {
@@ -123,8 +74,7 @@ const resolveInstamartStoreId = async (pincode) => {
   const lng = Number(geoResponse.data[0].lon);
   const address = geoResponse.data[0].display_name || "";
 
-  // Step 2: Send coordinates to Instamart.
-
+  // Step 2: Prepare request headers.
   const headers = {
     Accept: "application/json, */*",
     "Content-Type": "application/json",
@@ -137,6 +87,7 @@ const resolveInstamartStoreId = async (pincode) => {
     headers.Cookie = process.env.INSTAMART_COOKIE;
   }
 
+  // Step 3: Send the location to Instamart.
   const response = await axios.post(
     `${BASE_URL}/api/instamart/home/select-location/v2`,
     {
@@ -155,20 +106,53 @@ const resolveInstamartStoreId = async (pincode) => {
     }
   );
 
-console.log(
-  "LOCATION API RESPONSE:",
-  JSON.stringify(response.data, null, 2)
-);
-  // Step 3: Get the primary POD ID.
+  console.log("LOCATION API STATUS:", response.status);
+  console.log(
+    "LOCATION API RESPONSE:",
+    JSON.stringify(response.data, null, 2)
+  );
 
-  const storeId =
-    response.data?.data?.configs?.IM_PAGE_CONFIGS
-      ?.configInfo?.[0]?.card?.podDetails?.podId;
+  // Step 4: Find the primary store/POD ID in the response.
+  const findPrimaryPodId = (value) => {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = findPrimaryPodId(item);
+        if (result) return result;
+      }
+
+      return null;
+    }
+
+    if (Array.isArray(value.podDetailsList)) {
+      const primaryPod = value.podDetailsList.find(
+        (pod) => pod.priority === "PRIORITY_PRIMARY"
+      );
+
+      if (primaryPod?.podId) {
+        return primaryPod.podId;
+      }
+    }
+
+    if (value.podDetails?.podId) {
+      return value.podDetails.podId;
+    }
+
+    for (const child of Object.values(value)) {
+      const result = findPrimaryPodId(child);
+      if (result) return result;
+    }
+
+    return null;
+  };
+
+  const storeId = findPrimaryPodId(response.data);
 
   if (!storeId) {
-    throw new Error(
-      `Primary POD ID not found for PIN code ${pin}.`
-    );
+    throw new Error(`Primary POD ID not found for PIN code ${pin}.`);
   }
 
   console.log("Primary Store ID:", storeId);
@@ -182,8 +166,9 @@ console.log(
 };
 
 
-
-// 4. TEST LOCATION ENDPOINT
+// =====================================================
+// 3. TEST LOCATION ENDPOINT
+// =====================================================
 
 const testLocation = async (req, res) => {
   try {
@@ -210,11 +195,16 @@ const testLocation = async (req, res) => {
 };
 
 
-// 5. PRICE HELPER
+// =====================================================
+// 4. PRICE HELPER
+// =====================================================
 
 const parseMoney = (value) => {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
 
+  // Instamart may return money as { units, nanos }.
   if (typeof value === "object") {
     const units = Number(value.units);
     const nanos = Number(value.nanos || 0);
@@ -226,70 +216,65 @@ const parseMoney = (value) => {
     return Number((units + nanos / 1000000000).toFixed(2));
   }
 
+  // Handle normal numbers and strings such as "1,299".
   const amount = Number(String(value).replace(/,/g, ""));
 
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 };
 
 
-// 6. FIND EXACT PRODUCT VARIATION
+// =====================================================
+// 5. FIND PRODUCT USING ITS SPIN ID
+// =====================================================
 
-const findInstamartVariation = (value, spinId, depth = 0) => {
-  if (!value || typeof value !== "object" || depth > 20) {
+const findInstamartVariation = (value, spinId) => {
+  if (!value || typeof value !== "object") {
     return null;
   }
 
+  // Search each item when the response contains an array.
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findInstamartVariation(item, spinId, depth + 1);
-      if (found) return found;
+      const result = findInstamartVariation(item, spinId);
+      if (result) return result;
     }
 
     return null;
   }
 
+  // Check the possible ID fields.
   const ids = [
     value.spinId,
     value.spin_id,
-    value.id,
     value.productId,
+    value.product_id,
+    value.id,
   ];
 
-  if (
-    ids.some((id) => String(id || "").toUpperCase() === spinId) &&
-    value.price
-  ) {
+  const matched = ids.some(
+    (id) => String(id || "").trim().toUpperCase() === spinId
+  );
+
+  if (matched) {
     return value;
   }
 
-  if (Array.isArray(value.variations)) {
-    for (const variation of value.variations) {
-      const id = String(
-        variation.spinId ||
-        variation.spin_id ||
-        variation.id ||
-        variation.productId ||
-        ""
-      ).toUpperCase();
-
-      if (id === spinId && variation.price) {
-        return variation;
-      }
-    }
-  }
-
+  // Search inside nested objects.
   for (const child of Object.values(value)) {
-    const found = findInstamartVariation(child, spinId, depth + 1);
-    if (found) return found;
+    const result = findInstamartVariation(child, spinId);
+    if (result) return result;
   }
 
   return null;
 };
 
 
-// 7. FETCH PRODUCT FROM INSTAMART
+// =====================================================
+// 6. FETCH PRODUCT DETAILS FROM INSTAMART
+// =====================================================
 
 const fetchInstamartData = async (product, resolvedLocation = null) => {
+  // Get the Spin ID from the saved product or product URL.
   const spinId =
     product.instamartSpinId ||
     getInstamartSpinId(product.productUrl);
@@ -298,11 +283,16 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     throw new Error("Could not extract Instamart Spin ID.");
   }
 
-  const location =
-    resolvedLocation?.storeId
-      ? resolvedLocation
-      : await resolveInstamartStoreId(product.pincode);
+  // Use the supplied location or resolve it using the PIN code.
+  const location = resolvedLocation?.storeId
+    ? resolvedLocation
+    : await resolveInstamartStoreId(product.pincode);
 
+  if (!location?.storeId) {
+    throw new Error("Instamart Store ID is missing.");
+  }
+
+  // Prepare request headers.
   const headers = {
     Accept: "application/json, */*",
     Origin: BASE_URL,
@@ -314,40 +304,83 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     headers.Cookie = process.env.INSTAMART_COOKIE;
   }
 
+  // Create the product API URL.
   const url =
     `${BASE_URL}/api/instamart/item/v2/spin/` +
     `${encodeURIComponent(spinId)}?storeId=${encodeURIComponent(location.storeId)}`;
 
+  console.log("Instamart Product API URL:", url);
   console.log("Fetching Spin ID:", spinId);
   console.log("Using Store ID:", location.storeId);
 
+  // Request product details from Instamart.
   const response = await axios.get(url, {
     headers,
     timeout: 20000,
     maxRedirects: 3,
   });
 
-  console.log("Instamart item API status:", response.status);
+  console.log("PRODUCT API STATUS:", response.status);
+  console.log("PRODUCT RESPONSE TYPE:", typeof response.data);
+  console.log("PRODUCT RESPONSE DATA:", JSON.stringify(response.data));
 
+  // Find the product in the API response.
   const item = findInstamartVariation(response.data, spinId);
 
+  console.log("TARGET SPIN ID:", spinId);
+  console.log("MATCHING PRODUCT:", item ? "Found" : "Not found");
+
   if (!item) {
-    throw new Error(`Product ${spinId} was not found in Instamart response.`);
+    throw new Error(
+      `Product ${spinId} was not found in the Instamart response.`
+    );
   }
 
-  const stockValue = item.inventory?.inStock ?? item.inStock;
+  // Get stock information.
+  const stockValue =
+    item.inventory?.inStock ??
+    item.inStock ??
+    item.isAvail;
 
   const stockStatus =
     typeof stockValue === "boolean"
-      ? stockValue ? "In Stock" : "Out of Stock"
+      ? stockValue
+        ? "In Stock"
+        : "Out of Stock"
       : "Unknown";
 
+  // Get price and MRP.
+  const priceObject = item.price || {};
+
+  const price = parseMoney(
+    priceObject.offerPrice ??
+    priceObject.sellingPrice ??
+    priceObject.price ??
+    item.offerPrice ??
+    item.sellingPrice
+  );
+
+  const mrp = parseMoney(
+    priceObject.mrp ??
+    item.mrp
+  );
+
   return {
-    productName: item.displayName || item.name || item.productName || null,
-    price: parseMoney(item.price?.offerPrice ?? item.price?.sellingPrice),
-    mrp: parseMoney(item.price?.mrp),
+    productName:
+      item.displayName ||
+      item.name ||
+      item.productName ||
+      null,
+
+    price,
+    mrp,
     stockStatus,
-    availableUnits: null,
+
+    availableUnits:
+      item.inventory?.availableUnits ??
+      item.availableUnits ??
+      null,
+
     instamartSpinId: spinId,
     storeId: String(location.storeId),
     locationLat: location.lat,
@@ -357,7 +390,43 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
 };
 
 
+// =====================================================
+// 7. VALIDATE FETCHED PRODUCT DETAILS
+// =====================================================
+
+const validateFetchedProduct = (details) => {
+  const productName = String(details?.productName || "").trim();
+  const price = Number(details?.price);
+
+  if (!productName) {
+    throw new Error(
+      "Instamart did not return a valid product name."
+    );
+  }
+
+  if (
+    details?.price === null ||
+    details?.price === undefined ||
+    details?.price === "" ||
+    !Number.isFinite(price) ||
+    price <= 0
+  ) {
+    throw new Error(
+      "Instamart did not return a valid product price."
+    );
+  }
+
+  return {
+    ...details,
+    productName,
+    price,
+  };
+};
+
+
+// =====================================================
 // 8. SAVE MONITORING LOG
+// =====================================================
 
 const saveMonitoringLog = async (logData) => {
   try {
@@ -368,7 +437,9 @@ const saveMonitoringLog = async (logData) => {
 };
 
 
+// =====================================================
 // 9. PREVIEW PRODUCT
+// =====================================================
 
 const previewProduct = async (req, res) => {
   try {
@@ -383,6 +454,14 @@ const previewProduct = async (req, res) => {
 
     const pin = String(pincode).trim();
     const cleanUrl = String(productUrl).trim();
+
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 6-digit PIN code.",
+      });
+    }
+
     const spinId = getInstamartSpinId(cleanUrl);
 
     if (!spinId) {
@@ -392,9 +471,11 @@ const previewProduct = async (req, res) => {
       });
     }
 
+    // Resolve the PIN code to a store ID.
     const location = await resolveInstamartStoreId(pin);
 
-    const details = await fetchInstamartData(
+    // Fetch product details using the URL and location.
+    const fetchedDetails = await fetchInstamartData(
       {
         productUrl: cleanUrl,
         pincode: pin,
@@ -403,37 +484,55 @@ const previewProduct = async (req, res) => {
       location
     );
 
+    const details = validateFetchedProduct(fetchedDetails);
+
     return res.status(200).json({
       success: true,
       message: `Instamart product fetched for PIN code ${pin}.`,
-      details: { ...details, pincode: pin },
+      details: {
+        ...details,
+        pincode: pin,
+      },
     });
   } catch (error) {
-    console.error("Preview failed:", error.response?.data || error.message);
+    console.error("Preview failed:", error.message);
 
-    return res.status(error.response?.status === 403 ? 403 : 422).json({
+    return res.status(error.response?.status || 422).json({
       success: false,
       message: error.message,
+      instamartStatus: error.response?.status || null,
+      instamartResponse: error.response?.data || null,
     });
   }
 };
 
 
+// =====================================================
 // 10. ADD PRODUCT
+// =====================================================
 
 const addProduct = async (req, res) => {
   try {
-    const { productName, productUrl, pincode, initialDetails } = req.body;
+    // Current frontend sends productUrl and pincode.
+    const { productUrl, pincode } = req.body;
 
-    if (!productName || !productUrl || !pincode) {
+    if (!productUrl || !pincode) {
       return res.status(400).json({
         success: false,
-        message: "Product name, Instamart URL and PIN code are required.",
+        message: "Instamart URL and PIN code are required.",
       });
     }
 
     const pin = String(pincode).trim();
     const cleanUrl = String(productUrl).trim();
+
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 6-digit PIN code.",
+      });
+    }
+
     const spinId = getInstamartSpinId(cleanUrl);
 
     if (!spinId) {
@@ -443,26 +542,25 @@ const addProduct = async (req, res) => {
       });
     }
 
+    // Resolve location.
     const location = await resolveInstamartStoreId(pin);
 
-    const price = parseMoney(initialDetails?.price);
-    const mrp = parseMoney(initialDetails?.mrp);
+    // Fetch the latest product details.
+    const fetchedDetails = await fetchInstamartData(
+      {
+        productUrl: cleanUrl,
+        pincode: pin,
+        instamartSpinId: spinId,
+      },
+      location
+    );
 
-    const stockStatus = [
-      "In Stock",
-      "Out of Stock",
-      "Unknown",
-    ].includes(initialDetails?.stockStatus)
-      ? initialDetails.stockStatus
-      : "Unknown";
-
+    const details = validateFetchedProduct(fetchedDetails);
     const checkedAt = new Date();
 
-    const hasCheckData =
-      price !== null || mrp !== null || stockStatus !== "Unknown";
-
+    // Save the product in MongoDB.
     const product = await Product.create({
-      productName: String(initialDetails?.productName || productName).trim(),
+      productName: details.productName,
       productUrl: cleanUrl,
       pincode: pin,
       instamartSpinId: spinId,
@@ -470,30 +568,28 @@ const addProduct = async (req, res) => {
       locationLat: location.lat,
       locationLng: location.lng,
       locationAddress: location.address,
-      price: price ?? 0,
-      mrp,
-      inStock: stockStatus === "In Stock",
-      stockStatus,
-      availableUnits: null,
-      stockCheckedAt: hasCheckData ? checkedAt : null,
-      lastCheckedAt: price !== null ? checkedAt : null,
+      price: details.price,
+      mrp: details.mrp,
+      inStock: details.stockStatus === "In Stock",
+      stockStatus: details.stockStatus,
+      availableUnits: details.availableUnits,
+      stockCheckedAt: checkedAt,
+      lastCheckedAt: checkedAt,
     });
 
-    if (price !== null) {
-      await PriceHistory.create({
-        productId: product._id,
-        price,
-      });
-    }
+    // Save the first price record.
+    await PriceHistory.create({
+      productId: product._id,
+      price: details.price,
+    });
 
+    // Save the initial monitoring log.
     await saveMonitoringLog({
       productId: product._id,
       productName: product.productName,
-      status: hasCheckData ? "success" : "failed",
-      message: hasCheckData
-        ? "Initial Instamart product details saved."
-        : "Product saved; price and stock will be checked during monitoring.",
-      price,
+      status: "success",
+      message: "Initial Instamart product details saved.",
+      price: details.price,
       source: "manual",
     });
 
@@ -505,15 +601,19 @@ const addProduct = async (req, res) => {
   } catch (error) {
     console.error("Add product failed:", error.message);
 
-    return res.status(422).json({
+    return res.status(error.response?.status || 422).json({
       success: false,
       message: error.message,
+      instamartStatus: error.response?.status || null,
+      instamartResponse: error.response?.data || null,
     });
   }
 };
 
 
-// 11. GET PRODUCTS
+// =====================================================
+// 11. GET ALL PRODUCTS
+// =====================================================
 
 const getProducts = async (req, res) => {
   try {
@@ -533,7 +633,9 @@ const getProducts = async (req, res) => {
 };
 
 
+// =====================================================
 // 12. DELETE PRODUCT
+// =====================================================
 
 const deleteProduct = async (req, res) => {
   try {
@@ -546,6 +648,7 @@ const deleteProduct = async (req, res) => {
       });
     }
 
+    // Also delete the product's history and monitoring logs.
     await PriceHistory.deleteMany({ productId: product._id });
     await MonitoringLog.deleteMany({ productId: product._id });
 
@@ -562,7 +665,9 @@ const deleteProduct = async (req, res) => {
 };
 
 
+// =====================================================
 // 13. UPDATE PRODUCT
+// =====================================================
 
 const updateProduct = async (req, res) => {
   try {
@@ -577,6 +682,14 @@ const updateProduct = async (req, res) => {
 
     const pin = String(pincode).trim();
     const cleanUrl = String(productUrl).trim();
+
+    if (!/^\d{6}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid 6-digit PIN code.",
+      });
+    }
+
     const spinId = getInstamartSpinId(cleanUrl);
 
     if (!spinId) {
@@ -604,7 +717,10 @@ const updateProduct = async (req, res) => {
         availableUnits: null,
         stockCheckedAt: null,
       },
-      { new: true, runValidators: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     );
 
     if (!product) {
@@ -622,15 +738,19 @@ const updateProduct = async (req, res) => {
   } catch (error) {
     console.error("Update product failed:", error.message);
 
-    return res.status(422).json({
+    return res.status(error.response?.status || 422).json({
       success: false,
       message: error.message,
+      instamartStatus: error.response?.status || null,
+      instamartResponse: error.response?.data || null,
     });
   }
 };
 
 
-// 14. CHECK PRICE AND STOCK
+// =====================================================
+// 14. CHECK PRODUCT PRICE AND STOCK
+// =====================================================
 
 const checkProductPrice = async (productId, source = "automatic") => {
   let product;
@@ -647,6 +767,7 @@ const checkProductPrice = async (productId, source = "automatic") => {
 
     let location;
 
+    // Reuse the saved store ID when location details are available.
     if (
       product.storeId &&
       product.locationLat !== null &&
@@ -661,6 +782,7 @@ const checkProductPrice = async (productId, source = "automatic") => {
         address: product.locationAddress,
       };
     } else {
+      // Otherwise resolve the location again.
       location = await resolveInstamartStoreId(product.pincode);
 
       product.storeId = location.storeId;
@@ -669,7 +791,9 @@ const checkProductPrice = async (productId, source = "automatic") => {
       product.locationAddress = location.address;
     }
 
+    // Fetch the latest product information.
     const extracted = await fetchInstamartData(product, location);
+
     const now = new Date();
     const previousPrice = Number(product.price || 0);
 
@@ -677,6 +801,7 @@ const checkProductPrice = async (productId, source = "automatic") => {
       product.productName = extracted.productName;
     }
 
+    // Update price and save price history.
     if (extracted.price !== null) {
       product.price = extracted.price;
       product.lastCheckedAt = now;
@@ -691,6 +816,10 @@ const checkProductPrice = async (productId, source = "automatic") => {
       product.mrp = extracted.mrp;
     }
 
+    // Track stock changes before updating the saved stock status.
+    await trackStockStatusChange(product, extracted.stockStatus);
+
+    // Update stock information.
     product.stockStatus = extracted.stockStatus;
     product.inStock = extracted.stockStatus === "In Stock";
     product.availableUnits = extracted.availableUnits;
@@ -711,6 +840,7 @@ const checkProductPrice = async (productId, source = "automatic") => {
         }.`
       : "Instamart returned no usable price or stock information.";
 
+    // Send an email when the price changes.
     if (
       extracted.price !== null &&
       previousPrice > 0 &&
@@ -745,6 +875,7 @@ Quick Commerce Stock Watcher
       }
     }
 
+    // Save the result of this monitoring cycle.
     await saveMonitoringLog({
       productId: product._id,
       productName: product.productName,
@@ -786,7 +917,9 @@ Quick Commerce Stock Watcher
 };
 
 
+// =====================================================
 // 15. MANUAL PRODUCT CHECK
+// =====================================================
 
 const checkProduct = async (req, res) => {
   try {
@@ -808,7 +941,9 @@ const checkProduct = async (req, res) => {
 };
 
 
-// 16. PRICE HISTORY
+// =====================================================
+// 16. GET PRICE HISTORY
+// =====================================================
 
 const getPriceHistory = async (req, res) => {
   try {
@@ -839,11 +974,14 @@ const getPriceHistory = async (req, res) => {
 };
 
 
-// 17. MONITORING LOGS
+// =====================================================
+// 17. GET MONITORING LOGS
+// =====================================================
 
 const getMonitoringLogs = async (req, res) => {
   try {
     let limit = Number(req.query.limit) || 100;
+
     limit = Math.min(Math.max(limit, 1), 500);
 
     const logs = await MonitoringLog.find()
@@ -864,7 +1002,29 @@ const getMonitoringLogs = async (req, res) => {
 };
 
 
-// 18. EXPORT
+// =====================================================
+// 18. GET STOCK HISTORY
+// =====================================================
+
+const getStockHistory = async (req, res) => {
+  try {
+    const history = await StockHistory.find()
+      .populate("productId", "productName productUrl pincode")
+      .sort({ changedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      totalRecords: history.length,
+      history,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   addProduct,
@@ -877,4 +1037,5 @@ module.exports = {
   getMonitoringLogs,
   checkProductPrice,
   testLocation,
+    getStockHistory,
 };

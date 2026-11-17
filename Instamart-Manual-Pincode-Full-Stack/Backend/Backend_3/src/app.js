@@ -15,7 +15,7 @@
   // dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
   const app = express();
-  const allowedOrigins = ["http://localhost:5173", process.env.FRONTEND_URL].filter(Boolean);
+  const allowedOrigins = ["http://localhost:5173", process.env.FRONTEND_URL]
 
   app.use(cors({
     origin: allowedOrigins,

@@ -11,7 +11,9 @@
     checkProduct,
     getPriceHistory,
     getMonitoringLogs,
-    testLocation
+    testLocation, 
+      getStockHistory
+
   } = require("../Controller/ProductController");
 
   router.post("/test-location", testLocation);
@@ -24,5 +26,5 @@
   router.post("/:id/check", checkProduct);
   router.delete("/:id", deleteProduct);
   router.patch("/:id", updateProduct);
-
+router.get("/stock-history", getStockHistory);
   module.exports = { ProductRouter: router };
