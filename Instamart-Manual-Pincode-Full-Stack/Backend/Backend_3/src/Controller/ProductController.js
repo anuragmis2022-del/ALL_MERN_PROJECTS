@@ -479,7 +479,7 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
   });
 
   // NEW: Diagnose the response received by Render.
- console.log("PRODUCT RESPONSE HEADERS:", {
+ console.log("LOCATION RESPONSE HEADERS:", {
   contentType: response.headers["content-type"],
   contentLength: response.headers["content-length"],
   server: response.headers["server"],
