@@ -479,14 +479,16 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
   });
 
   // NEW: Diagnose the response received by Render.
-  console.log("PRODUCT RESPONSE HEADERS:", {
-    contentType: response.headers["content-type"],
-    contentLength: response.headers["content-length"],
-    server: response.headers["server"],
-    via: response.headers["via"],
-    cache: response.headers["x-cache"],
-    contentEncoding: response.headers["content-encoding"],
-  });
+ console.log("PRODUCT RESPONSE HEADERS:", {
+  contentType: response.headers["content-type"],
+  contentLength: response.headers["content-length"],
+  server: response.headers["server"],
+  via: response.headers["via"],
+  cache: response.headers["x-cache"],
+  contentEncoding: response.headers["content-encoding"],
+  cloudfrontId: response.headers["x-amz-cf-id"],
+  cloudfrontPop: response.headers["x-amz-cf-pop"],
+});
 
   console.log("PRODUCT API STATUS:", response.status);
   console.log("PRODUCT RESPONSE TYPE:", typeof response.data);
