@@ -129,8 +129,7 @@ function MonitoringLogs() {
             </p>
 
             <p className="mt-1 text-xs leading-5 text-amber-800">
-              Successful checks save the price read from the configured product page. The current backend does not automatically detect stock availability.
-            </p>
+Successful checks record the latest product price and automatically detect stock availability from the configured Instamart product page            </p>
           </div>
         </div>
 
