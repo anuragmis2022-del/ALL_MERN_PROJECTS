@@ -39,6 +39,7 @@ const getInstamartSpinId = (productUrl) => {
 // 2. RESOLVE PIN CODE TO INSTAMART STORE ID
 // =====================================================
 
+
 const resolveInstamartStoreId = async (pincode) => {
   const pin = String(pincode || "").trim();
 
@@ -48,7 +49,7 @@ const resolveInstamartStoreId = async (pincode) => {
 
   console.log("Resolving Instamart location for:", pin);
 
-  // Step 1: Get latitude and longitude from the PIN code.
+  // STEP 1: Get coordinates from PIN code.
   const geoResponse = await axios.get(
     "https://nominatim.openstreetmap.org/search",
     {
@@ -74,7 +75,10 @@ const resolveInstamartStoreId = async (pincode) => {
   const lng = Number(geoResponse.data[0].lon);
   const address = geoResponse.data[0].display_name || "";
 
-  // Step 2: Prepare request headers.
+  console.log("Coordinates:", { lat, lng });
+  console.log("Resolved address:", address);
+
+  // STEP 2: Prepare Instamart headers.
   const headers = {
     Accept: "application/json, */*",
     "Content-Type": "application/json",
@@ -87,7 +91,7 @@ const resolveInstamartStoreId = async (pincode) => {
     headers.Cookie = process.env.INSTAMART_COOKIE;
   }
 
-  // Step 3: Send the location to Instamart.
+  // STEP 3: Request Instamart location information.
   const response = await axios.post(
     `${BASE_URL}/api/instamart/home/select-location/v2`,
     {
@@ -107,63 +111,211 @@ const resolveInstamartStoreId = async (pincode) => {
   );
 
   console.log("LOCATION API STATUS:", response.status);
+
   console.log(
-    "LOCATION API RESPONSE:",
+    "LOCATION API RAW RESPONSE:",
     JSON.stringify(response.data, null, 2)
   );
 
-  // Step 4: Find the primary store/POD ID in the response.
-  const findPrimaryPodId = (value) => {
-    if (!value || typeof value !== "object") {
-      return null;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        const result = findPrimaryPodId(item);
-        if (result) return result;
-      }
-
-      return null;
-    }
-
-    if (Array.isArray(value.podDetailsList)) {
-      const primaryPod = value.podDetailsList.find(
-        (pod) => pod.priority === "PRIORITY_PRIMARY"
-      );
-
-      if (primaryPod?.podId) {
-        return primaryPod.podId;
-      }
-    }
-
-    if (value.podDetails?.podId) {
-      return value.podDetails.podId;
-    }
-
-    for (const child of Object.values(value)) {
-      const result = findPrimaryPodId(child);
-      if (result) return result;
-    }
-
-    return null;
+  // STEP 4: Collect possible location identifiers.
+  const candidates = {
+    storeIds: [],
+    deeplinkStoreIds: [],
+    podIds: [],
+    primaryPodIds: [],
   };
 
-  const storeId = findPrimaryPodId(response.data);
+  const addCandidate = (array, value, source) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ""
+    ) {
+      return;
+    }
 
-  if (!storeId) {
-    throw new Error(`Primary POD ID not found for PIN code ${pin}.`);
+    const id = String(value).trim();
+
+    if (!id) return;
+
+    if (!candidates[array].some((item) => item.value === id)) {
+      candidates[array].push({
+        value: id,
+        source,
+      });
+    }
+  };
+
+  // STEP 5: Recursively inspect objects, arrays and strings.
+  const inspectResponse = (value, path = "response") => {
+    if (value === null || value === undefined) {
+      return;
+    }
+
+    // Handle string values, including deeplinks.
+    if (typeof value === "string") {
+      const decoded = (() => {
+        try {
+          return decodeURIComponent(value);
+        } catch {
+          return value;
+        }
+      })();
+
+      // Example: swiggy://...storeId=123456
+      const deeplinkMatches = decoded.matchAll(
+        /storeId=(\d+)/gi
+      );
+
+      for (const match of deeplinkMatches) {
+        addCandidate(
+          "deeplinkStoreIds",
+          match[1],
+          `${path} (deeplink)`
+        );
+      }
+
+      // Some APIs may return JSON as a string.
+      const trimmed = value.trim();
+
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        try {
+          inspectResponse(JSON.parse(trimmed), `${path} (parsed JSON)`);
+        } catch {
+          // Not valid JSON. Continue normally.
+        }
+      }
+
+      return;
+    }
+
+    if (typeof value !== "object") {
+      return;
+    }
+
+    // Handle arrays.
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        inspectResponse(item, `${path}[${index}]`);
+      });
+
+      return;
+    }
+
+    // Check primary POD list.
+    if (Array.isArray(value.podDetailsList)) {
+      const primaryPods = value.podDetailsList.filter(
+        (pod) =>
+          String(pod?.priority || "").toUpperCase() ===
+          "PRIORITY_PRIMARY"
+      );
+
+      primaryPods.forEach((pod, index) => {
+        addCandidate(
+          "primaryPodIds",
+          pod?.podId,
+          `${path}.podDetailsList[${index}].podId`
+        );
+
+        addCandidate(
+          "storeIds",
+          pod?.storeId,
+          `${path}.podDetailsList[${index}].storeId`
+        );
+      });
+    }
+
+    // Check nested podDetails.
+    if (value.podDetails) {
+      addCandidate(
+        "podIds",
+        value.podDetails.podId,
+        `${path}.podDetails.podId`
+      );
+
+      addCandidate(
+        "storeIds",
+        value.podDetails.storeId,
+        `${path}.podDetails.storeId`
+      );
+    }
+
+    // Check possible direct ID fields.
+    for (const [key, child] of Object.entries(value)) {
+      const normalizedKey = key.toLowerCase();
+
+      if (
+        normalizedKey === "storeid" ||
+        normalizedKey === "primarystoreid"
+      ) {
+        addCandidate(
+          "storeIds",
+          child,
+          `${path}.${key}`
+        );
+      }
+
+      if (normalizedKey === "primarypodid") {
+        addCandidate(
+          "primaryPodIds",
+          child,
+          `${path}.${key}`
+        );
+      }
+
+      if (normalizedKey === "podid") {
+        addCandidate(
+          "podIds",
+          child,
+          `${path}.${key}`
+        );
+      }
+
+      // Search all nested objects and arrays.
+      inspectResponse(child, `${path}.${key}`);
+    }
+  };
+
+  inspectResponse(response.data);
+
+  // STEP 6: Display all discovered candidates.
+  console.log(
+    "LOCATION IDENTIFIER CANDIDATES:",
+    JSON.stringify(candidates, null, 2)
+  );
+
+  // STEP 7: Select a candidate.
+  // Prefer an explicitly returned store ID.
+  // Next, use a store ID extracted from a deeplink.
+  // Finally, retain the existing POD ID fallback.
+  const selected =
+    candidates.storeIds[0] ||
+    candidates.deeplinkStoreIds[0] ||
+    candidates.primaryPodIds[0] ||
+    candidates.podIds[0];
+
+  if (!selected) {
+    throw new Error(
+      `No usable Store ID or POD ID found for PIN code ${pin}. Check LOCATION API RAW RESPONSE in the backend terminal.`
+    );
   }
 
-  console.log("Primary Store ID:", storeId);
+  console.log("SELECTED LOCATION ID:", selected.value);
+  console.log("IDENTIFIER SOURCE:", selected.source);
 
+  // STEP 8: Return location information.
   return {
-    storeId: String(storeId),
+    storeId: selected.value,
+    identifierSource: selected.source,
     lat,
     lng,
     address,
   };
 };
+
 
 
 // =====================================================
@@ -1029,7 +1181,7 @@ const getStockHistory = async (req, res) => {
 module.exports = {
   addProduct,
   previewProduct,
-  getProducts,
+  getProducts, 
   deleteProduct,
   updateProduct,
   checkProduct,

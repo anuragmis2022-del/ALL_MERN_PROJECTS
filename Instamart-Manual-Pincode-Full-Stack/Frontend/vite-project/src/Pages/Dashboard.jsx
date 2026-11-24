@@ -46,7 +46,6 @@ function Dashboard() {
   const [productName, setProductName] = useState("");
   const [productUrl, setProductUrl] = useState("");
   const [pincode, setPincode] = useState("");
-
   const [message, setMessage] = useState("");
   const [editId, setEditId] = useState(null);
   const [checkingId, setCheckingId] = useState(null);
@@ -82,7 +81,7 @@ function Dashboard() {
       const productResponse = await axios.get(API_URL);
 
       const logResponse = await axios.get(
-        `${API_URL}/monitoring-logs?limit=200`
+        `${API_URL}/monitoring-logs?limit=200`,
       );
 
       setProducts(productResponse.data.products || []);
@@ -107,7 +106,7 @@ function Dashboard() {
       const productResponse = await axios.get(API_URL);
 
       const logResponse = await axios.get(
-        `${API_URL}/monitoring-logs?limit=200`
+        `${API_URL}/monitoring-logs?limit=200`,
       );
 
       setProducts(productResponse.data.products || []);
@@ -124,29 +123,29 @@ function Dashboard() {
 
   // Statistics.
   const successfulChecks = monitoringLogs.filter(
-    (log) => log.status === "success"
+    (log) => log.status === "success",
   ).length;
 
   const failedChecks = monitoringLogs.filter(
-    (log) => log.status === "failed"
+    (log) => log.status === "failed",
   ).length;
 
   const inStockProducts = products.filter(
-    (product) => product.inStock === true
+    (product) => product.inStock === true,
   ).length;
 
   const outOfStockProducts = products.filter(
-    (product) => product.stockStatus === "Out of Stock"
+    (product) => product.stockStatus === "Out of Stock",
   ).length;
 
   // Search products.
   const filteredProducts = products.filter((product) =>
     `${product.productName} ${product.pincode} ${product.platform || "Instamart"}`
       .toLowerCase()
-      .includes(searchTerm.toLowerCase())
+      .includes(searchTerm.toLowerCase()),
   );
 
-  // Chart data comes from monitoring logs that contain a price.
+  // Chart data comes from monitoring logs that contain a price.-1 chart formation
   const priceTrendData = monitoringLogs
     .filter(
       (log) =>
@@ -154,7 +153,7 @@ function Dashboard() {
         log.price !== null &&
         log.checkedAt &&
         (selectedPriceProduct === "all" ||
-          log.productName === selectedPriceProduct)
+          log.productName === selectedPriceProduct),
     )
     .slice()
     .reverse()
@@ -188,7 +187,7 @@ function Dashboard() {
     }
   }, [showForm, editId]);
 
-  // Monitoring activity chart data.
+  // Monitoring activity chart data. -2nd Chart formation
   const activityByDate = {};
 
   monitoringLogs.forEach((log) => {
@@ -256,9 +255,7 @@ function Dashboard() {
   const reloadDashboardData = async () => {
     const updatedProducts = await axios.get(API_URL);
 
-    const updatedLogs = await axios.get(
-      `${API_URL}/monitoring-logs?limit=200`
-    );
+    const updatedLogs = await axios.get(`${API_URL}/monitoring-logs?limit=200`);
 
     setProducts(updatedProducts.data.products || []);
     setMonitoringLogs(updatedLogs.data.logs || []);
@@ -325,10 +322,7 @@ function Dashboard() {
               disabled={loading}
               className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
             >
-              <RefreshCw
-                size={16}
-                className={loading ? "animate-spin" : ""}
-              />
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
 
@@ -362,10 +356,7 @@ function Dashboard() {
 
         {/* Instamart Notice */}
         <div className="mb-7 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <Activity
-            size={19}
-            className="mt-0.5 shrink-0 text-blue-700"
-          />
+          <Activity size={19} className="mt-0.5 shrink-0 text-blue-700" />
 
           <div>
             <p className="text-sm font-semibold text-blue-900">
@@ -475,8 +466,8 @@ function Dashboard() {
                 </p>
 
                 <p className="mt-1 max-w-xs text-xs leading-5 text-slate-500">
-                  Run Check Now on a product. The chart will use prices
-                  returned in your monitoring logs.
+                  Run Check Now on a product. The chart will use prices returned
+                  in your monitoring logs.
                 </p>
               </div>
             ) : (
@@ -614,8 +605,8 @@ function Dashboard() {
               </h3>
 
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                Products are checked automatically at the interval configured
-                in Backend/.env.
+                Products are checked automatically at the interval configured in
+                Backend/.env.
               </p>
 
               <p className="mt-3 text-xs font-medium text-blue-600">
@@ -636,8 +627,7 @@ function Dashboard() {
               </h3>
 
               <p className="mt-2 text-xs leading-5 text-slate-500">
-                Email notifications are configured for qualifying price
-                changes.
+                Email notifications are configured for qualifying price changes.
               </p>
 
               <p className="mt-3 text-xs font-medium text-emerald-700">
@@ -722,9 +712,7 @@ function Dashboard() {
                   value={pincode}
                   maxLength={6}
                   onChange={(e) => {
-                    setPincode(
-                      e.target.value.replace(/\D/g, "").slice(0, 6)
-                    );
+                    setPincode(e.target.value.replace(/\D/g, "").slice(0, 6));
 
                     clearPreview();
                   }}
@@ -777,8 +765,7 @@ function Dashboard() {
                   <p>
                     <span className="text-slate-500">MRP</span>
                     <br />
-                    {previewData.mrp !== null &&
-                    previewData.mrp !== undefined
+                    {previewData.mrp !== null && previewData.mrp !== undefined
                       ? `₹${previewData.mrp}`
                       : "Not provided"}
                   </p>
@@ -810,7 +797,7 @@ function Dashboard() {
 
                     if (!cleanUrl || !/^[0-9]{6}$/.test(cleanPin)) {
                       setMessage(
-                        "Please enter an Instamart product URL and a valid 6-digit PIN code."
+                        "Please enter an Instamart product URL and a valid 6-digit PIN code.",
                       );
                       return;
                     }
@@ -819,18 +806,15 @@ function Dashboard() {
                     setMessage("");
                     clearPreview();
 
-                    const response = await axios.post(
-                      `${API_URL}/preview`,
-                      {
-                        productUrl: cleanUrl,
-                        pincode: cleanPin,
-                      }
-                    );
+                    const response = await axios.post(`${API_URL}/preview`, {
+                      productUrl: cleanUrl,
+                      pincode: cleanPin,
+                    });
 
                     const details = response.data?.details;
 
                     const fetchedName = String(
-                      details?.productName || ""
+                      details?.productName || "",
                     ).trim();
 
                     const fetchedPrice = Number(details?.price);
@@ -838,7 +822,7 @@ function Dashboard() {
                     // Frontend also validates the preview response.
                     if (!fetchedName) {
                       throw new Error(
-                        "Instamart did not return a valid product name."
+                        "Instamart did not return a valid product name.",
                       );
                     }
 
@@ -850,7 +834,7 @@ function Dashboard() {
                       fetchedPrice <= 0
                     ) {
                       throw new Error(
-                        "Instamart did not return a valid price. You cannot add this product."
+                        "Instamart did not return a valid price. You cannot add this product.",
                       );
                     }
 
@@ -865,7 +849,7 @@ function Dashboard() {
 
                     setMessage(
                       response.data.message ||
-                        "Product details fetched successfully."
+                        "Product details fetched successfully.",
                     );
                   } catch (error) {
                     console.log(error);
@@ -875,7 +859,7 @@ function Dashboard() {
                     setMessage(
                       error.response?.data?.message ||
                         error.message ||
-                        "Unable to fetch product details."
+                        "Unable to fetch product details.",
                     );
                   } finally {
                     setPreviewLoading(false);
@@ -896,9 +880,7 @@ function Dashboard() {
               {/* Add / Update Product */}
               <button
                 disabled={
-                  saving ||
-                  previewLoading ||
-                  (!editId && !hasValidPreview)
+                  saving || previewLoading || (!editId && !hasValidPreview)
                 }
                 onClick={async () => {
                   try {
@@ -907,7 +889,7 @@ function Dashboard() {
 
                     if (!cleanUrl || !/^[0-9]{6}$/.test(cleanPin)) {
                       setMessage(
-                        "Please enter a valid Instamart URL and 6-digit PIN code."
+                        "Please enter a valid Instamart URL and 6-digit PIN code.",
                       );
                       return;
                     }
@@ -915,7 +897,7 @@ function Dashboard() {
                     // New products must have a successful preview.
                     if (!editId && !hasValidPreview) {
                       setMessage(
-                        "Please fetch valid product details before adding this product."
+                        "Please fetch valid product details before adding this product.",
                       );
                       return;
                     }
@@ -941,12 +923,12 @@ function Dashboard() {
                     if (editId) {
                       response = await axios.patch(
                         `${API_URL}/${editId}`,
-                        productData
+                        productData,
                       );
                     } else {
                       response = await axios.post(
                         `${API_URL}/add`,
-                        productData
+                        productData,
                       );
                     }
 
@@ -959,7 +941,7 @@ function Dashboard() {
                     console.log(error);
 
                     setMessage(
-                      error.response?.data?.message || "Operation failed."
+                      error.response?.data?.message || "Operation failed.",
                     );
                   } finally {
                     setSaving(false);
@@ -1044,9 +1026,7 @@ function Dashboard() {
                 className="mx-auto animate-spin text-blue-600"
               />
 
-              <p className="mt-3 text-sm text-slate-500">
-                Loading products...
-              </p>
+              <p className="mt-3 text-sm text-slate-500">Loading products...</p>
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="px-5 py-16 text-center">
@@ -1081,17 +1061,11 @@ function Dashboard() {
               {/* Mobile Product Cards */}
               <div className="divide-y divide-slate-100 sm:hidden">
                 {filteredProducts.map((product) => (
-                  <article
-                    key={product._id}
-                    className="space-y-3 p-4"
-                  >
+                  <article key={product._id} className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-                          <Package
-                            size={19}
-                            className="text-blue-600"
-                          />
+                          <Package size={19} className="text-blue-600" />
                         </div>
 
                         <div className="min-w-0">
@@ -1143,21 +1117,21 @@ function Dashboard() {
                             setMessage("");
 
                             const response = await axios.post(
-                              `${API_URL}/${product._id}/check`
+                              `${API_URL}/${product._id}/check`,
                             );
 
                             setMessage(
                               response.data.price !== null &&
                                 response.data.price !== undefined
                                 ? `${response.data.message}. Latest price: ₹${response.data.price}`
-                                : response.data.message
+                                : response.data.message,
                             );
 
                             await reloadDashboardData();
                           } catch (error) {
                             setMessage(
                               error.response?.data?.message ||
-                                "Unable to check product"
+                                "Unable to check product",
                             );
 
                             try {
@@ -1174,15 +1148,11 @@ function Dashboard() {
                         <RefreshCw
                           size={14}
                           className={
-                            checkingId === product._id
-                              ? "animate-spin"
-                              : ""
+                            checkingId === product._id ? "animate-spin" : ""
                           }
                         />
 
-                        {checkingId === product._id
-                          ? "Checking"
-                          : "Check Now"}
+                        {checkingId === product._id ? "Checking" : "Check Now"}
                       </button>
 
                       {/* Edit */}
@@ -1201,7 +1171,7 @@ function Dashboard() {
                         onClick={async () => {
                           if (
                             !window.confirm(
-                              `Are you sure you want to delete ${product.productName}?`
+                              `Are you sure you want to delete ${product.productName}?`,
                             )
                           ) {
                             return;
@@ -1209,7 +1179,7 @@ function Dashboard() {
 
                           try {
                             const response = await axios.delete(
-                              `${API_URL}/${product._id}`
+                              `${API_URL}/${product._id}`,
                             );
 
                             setMessage(response.data.message);
@@ -1222,7 +1192,7 @@ function Dashboard() {
                           } catch (error) {
                             setMessage(
                               error.response?.data?.message ||
-                                "Unable to delete product"
+                                "Unable to delete product",
                             );
                           }
                         }}
@@ -1269,10 +1239,7 @@ function Dashboard() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-                              <Package
-                                size={19}
-                                className="text-blue-600"
-                              />
+                              <Package size={19} className="text-blue-600" />
                             </div>
 
                             <div>
@@ -1341,9 +1308,7 @@ function Dashboard() {
                         {/* Last Checked */}
                         <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
                           {product.lastCheckedAt
-                            ? new Date(
-                                product.lastCheckedAt
-                              ).toLocaleString()
+                            ? new Date(product.lastCheckedAt).toLocaleString()
                             : "Not checked yet"}
                         </td>
 
@@ -1360,14 +1325,14 @@ function Dashboard() {
                                   setMessage("");
 
                                   const response = await axios.post(
-                                    `${API_URL}/${product._id}/check`
+                                    `${API_URL}/${product._id}/check`,
                                   );
 
                                   setMessage(
                                     response.data.price !== null &&
                                       response.data.price !== undefined
                                       ? `${response.data.message}. Latest price: ₹${response.data.price}`
-                                      : response.data.message
+                                      : response.data.message,
                                   );
 
                                   await reloadDashboardData();
@@ -1376,7 +1341,7 @@ function Dashboard() {
 
                                   setMessage(
                                     error.response?.data?.message ||
-                                      "Unable to check product"
+                                      "Unable to check product",
                                   );
 
                                   try {
@@ -1419,7 +1384,7 @@ function Dashboard() {
                               onClick={async () => {
                                 if (
                                   !window.confirm(
-                                    `Are you sure you want to delete ${product.productName}?`
+                                    `Are you sure you want to delete ${product.productName}?`,
                                   )
                                 ) {
                                   return;
@@ -1427,7 +1392,7 @@ function Dashboard() {
 
                                 try {
                                   const response = await axios.delete(
-                                    `${API_URL}/${product._id}`
+                                    `${API_URL}/${product._id}`,
                                   );
 
                                   setMessage(response.data.message);
@@ -1442,7 +1407,7 @@ function Dashboard() {
 
                                   setMessage(
                                     error.response?.data?.message ||
-                                      "Unable to delete product"
+                                      "Unable to delete product",
                                   );
                                 }
                               }}
@@ -1534,20 +1499,16 @@ function Dashboard() {
                 <table className="w-full min-w-[650px] text-left">
                   <thead>
                     <tr className="bg-slate-50">
-                      {[
-                        "Product",
-                        "Result",
-                        "Message",
-                        "Source",
-                        "Time",
-                      ].map((heading) => (
-                        <th
-                          key={heading}
-                          className="px-5 py-4 text-[10px] font-semibold uppercase tracking-wider text-slate-500"
-                        >
-                          {heading}
-                        </th>
-                      ))}
+                      {["Product", "Result", "Message", "Source", "Time"].map(
+                        (heading) => (
+                          <th
+                            key={heading}
+                            className="px-5 py-4 text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                          >
+                            {heading}
+                          </th>
+                        ),
+                      )}
                     </tr>
                   </thead>
 

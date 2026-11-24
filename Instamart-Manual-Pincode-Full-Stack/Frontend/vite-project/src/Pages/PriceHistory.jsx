@@ -166,7 +166,7 @@ function PriceHistory() {
               Recorded Product Page Prices
             </p>
 
-            <p className="mt-1 text-xs leading-5 text-amber-200/70">
+            <p className="mt-1 text-xs leading-5 text-amber-200/">
               These records are saved when the backend successfully reads a price from the configured product page. A failed page check does not create a price-history record.
             </p>
           </div>
