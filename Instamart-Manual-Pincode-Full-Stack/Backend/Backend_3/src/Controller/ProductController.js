@@ -112,6 +112,15 @@ const resolveInstamartStoreId = async (pincode) => {
 
   console.log("LOCATION API STATUS:", response.status);
 
+console.log("LOCATION RESPONSE HEADERS:", {
+  contentType: response.headers["content-type"],
+  contentLength: response.headers["content-length"],
+  server: response.headers["server"],
+  via: response.headers["via"],
+  cache: response.headers["x-cache"],
+  contentEncoding: response.headers["content-encoding"],
+});
+
   console.log(
     "LOCATION API RAW RESPONSE:",
     JSON.stringify(response.data, null, 2)
@@ -425,8 +434,9 @@ const findInstamartVariation = (value, spinId) => {
 // 6. FETCH PRODUCT DETAILS FROM INSTAMART
 // =====================================================
 
+
+
 const fetchInstamartData = async (product, resolvedLocation = null) => {
-  // Get the Spin ID from the saved product or product URL.
   const spinId =
     product.instamartSpinId ||
     getInstamartSpinId(product.productUrl);
@@ -435,7 +445,6 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     throw new Error("Could not extract Instamart Spin ID.");
   }
 
-  // Use the supplied location or resolve it using the PIN code.
   const location = resolvedLocation?.storeId
     ? resolvedLocation
     : await resolveInstamartStoreId(product.pincode);
@@ -444,7 +453,6 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     throw new Error("Instamart Store ID is missing.");
   }
 
-  // Prepare request headers.
   const headers = {
     Accept: "application/json, */*",
     Origin: BASE_URL,
@@ -456,7 +464,6 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     headers.Cookie = process.env.INSTAMART_COOKIE;
   }
 
-  // Create the product API URL.
   const url =
     `${BASE_URL}/api/instamart/item/v2/spin/` +
     `${encodeURIComponent(spinId)}?storeId=${encodeURIComponent(location.storeId)}`;
@@ -465,18 +472,26 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
   console.log("Fetching Spin ID:", spinId);
   console.log("Using Store ID:", location.storeId);
 
-  // Request product details from Instamart.
   const response = await axios.get(url, {
     headers,
     timeout: 20000,
     maxRedirects: 3,
   });
 
+  // NEW: Diagnose the response received by Render.
+  console.log("PRODUCT RESPONSE HEADERS:", {
+    contentType: response.headers["content-type"],
+    contentLength: response.headers["content-length"],
+    server: response.headers["server"],
+    via: response.headers["via"],
+    cache: response.headers["x-cache"],
+    contentEncoding: response.headers["content-encoding"],
+  });
+
   console.log("PRODUCT API STATUS:", response.status);
   console.log("PRODUCT RESPONSE TYPE:", typeof response.data);
   console.log("PRODUCT RESPONSE DATA:", JSON.stringify(response.data));
 
-  // Find the product in the API response.
   const item = findInstamartVariation(response.data, spinId);
 
   console.log("TARGET SPIN ID:", spinId);
@@ -488,7 +503,6 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     );
   }
 
-  // Get stock information.
   const stockValue =
     item.inventory?.inStock ??
     item.inStock ??
@@ -501,7 +515,6 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
         : "Out of Stock"
       : "Unknown";
 
-  // Get price and MRP.
   const priceObject = item.price || {};
 
   const price = parseMoney(
@@ -540,6 +553,7 @@ const fetchInstamartData = async (product, resolvedLocation = null) => {
     locationAddress: location.address || "",
   };
 };
+
 
 
 // =====================================================
